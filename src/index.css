@@ -1,0 +1,52 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root { color-scheme: dark; }
+html, body { background: #0a0a0b; }
+body { font-family: 'Geist', ui-sans-serif, system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+.mono { font-family: 'Geist Mono', ui-monospace, monospace; }
+
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #27272a; border-radius: 8px; border: 2px solid #0a0a0b; }
+::-webkit-scrollbar-thumb:hover { background: #3f3f46; }
+
+.card-dragging { opacity: 0.4; transform: rotate(2deg) scale(0.98); }
+.col-drag-over { background: rgba(99, 102, 241, 0.04); box-shadow: inset 0 0 0 1px rgba(129, 140, 248, 0.25); }
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.anim-up { animation: slideUp .18s ease-out both; }
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+.anim-fade { animation: fadeIn .15s ease-out both; }
+
+@keyframes pop {
+  0%   { transform: scale(.96); opacity: 0; }
+  100% { transform: scale(1);   opacity: 1; }
+}
+.anim-pop { animation: pop .18s ease-out both; }
+
+@keyframes slideInRight {
+  from { transform: translateX(100%); }
+  to   { transform: translateX(0); }
+}
+.anim-slide-right { animation: slideInRight .22s ease-out both; }
+
+.ring-focus:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px #0a0a0b, 0 0 0 4px rgba(129, 140, 248, .45);
+}
+
+textarea { resize: vertical; }
+
+.card { transition: transform .12s ease, box-shadow .12s ease, border-color .12s ease; }
+.card:hover { transform: translateY(-1px); border-color: #3f3f46; }
+
+.bugs-col { background: linear-gradient(180deg, rgba(244, 63, 94, 0.04) 0%, transparent 80%); }

@@ -1,0 +1,1223 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Task Manager · MetaMedics</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+  :root { color-scheme: dark; }
+  html, body { background: #0a0a0b; }
+  body { font-family: 'Geist', ui-sans-serif, system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+  .mono { font-family: 'Geist Mono', ui-monospace, monospace; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #27272a; border-radius: 8px; border: 2px solid #0a0a0b; }
+  ::-webkit-scrollbar-thumb:hover { background: #3f3f46; }
+  .card-dragging { opacity: 0.4; transform: rotate(2deg) scale(0.98); }
+  .col-drag-over { background: rgba(99, 102, 241, 0.04); box-shadow: inset 0 0 0 1px rgba(129, 140, 248, 0.25); }
+  @keyframes slideUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+  .anim-up { animation: slideUp .18s ease-out both; }
+  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+  .anim-fade { animation: fadeIn .15s ease-out both; }
+  @keyframes pop { 0% { transform: scale(.96); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
+  .anim-pop { animation: pop .18s ease-out both; }
+  @keyframes slideInRight { from { transform: translateX(100%); } to { transform: translateX(0); } }
+  .anim-slide-right { animation: slideInRight .22s ease-out both; }
+  .ring-focus:focus { outline: none; box-shadow: 0 0 0 2px #0a0a0b, 0 0 0 4px rgba(129,140,248,.45); }
+  textarea { resize: vertical; }
+  .card { transition: transform .12s ease, box-shadow .12s ease, border-color .12s ease; }
+  .card:hover { transform: translateY(-1px); border-color: #3f3f46; }
+  .bugs-col { background: linear-gradient(180deg, rgba(244,63,94,0.04) 0%, transparent 80%); }
+</style>
+</head>
+<body class="text-zinc-100">
+<div id="root"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<script type="text/babel" data-presets="react">
+const { useState, useEffect, useMemo, useRef, useCallback } = React;
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Constants
+// ═══════════════════════════════════════════════════════════════════════════
+const STORAGE_KEY = 'metamedics-kanban-v2';
+const STORAGE_KEY_V1 = 'metamedics-kanban-v1';
+const ACTIVITY_KEY = 'metamedics-activity-v1';
+const ME_KEY = 'metamedics-me';
+const ACTIVITY_MAX = 200;
+
+const COLUMNS = [
+  { id: 'todo_define', title: 'Por definir', dot: '#71717a',
+    info: 'Existe la idea o el problema, pero aún no sabemos bien qué hay que hacer ni cómo. Necesita discusión antes de poder trabajarse.' },
+  { id: 'defined', title: 'Definido', dot: '#a78bfa',
+    info: 'Tiene contexto suficiente, responsable asignado y estimación. Está listo para coger cuando haya capacidad.' },
+  { id: 'in_progress', title: 'En progreso', dot: '#60a5fa',
+    info: 'Alguien está trabajando activamente en ello ahora mismo. No debería haber más de 2-3 tarjetas por persona aquí a la vez.' },
+  { id: 'review', title: 'En revisión', dot: '#f59e0b',
+    info: 'El trabajo está hecho pero necesita validación: una segunda opinión, QA, aprobación de producto, o prueba real antes de cerrar.' },
+  { id: 'done', title: 'Completado', dot: '#34d399',
+    info: 'Revisado, aprobado y entregado. No requiere más acción. Se archiva automáticamente para mantener el histórico.' },
+  { id: 'bugs', title: 'Bugs', dot: '#f43f5e', fixed: true,
+    info: 'Columna fija para errores en producción o detectados en testing. No siguen el flujo normal, necesitan visibilidad propia y atención rápida.' },
+];
+const FLOW_COLUMNS = ['todo_define','defined','in_progress','review','done'];
+
+const TYPES = {
+  bug:        { label: 'Bug',           icon: '🐛', fg: 'text-rose-300',   bg: 'bg-rose-500/10',   bd: 'border-rose-500/20',   strip: '#f43f5e' },
+  task:       { label: 'Tarea',         icon: '✅', fg: 'text-sky-300',    bg: 'bg-sky-500/10',    bd: 'border-sky-500/20',    strip: '#38bdf8' },
+  feedback:   { label: 'Feedback',      icon: '💬', fg: 'text-violet-300', bg: 'bg-violet-500/10', bd: 'border-violet-500/20', strip: '#a78bfa' },
+  improvement:{ label: 'Mejora',        icon: '✨', fg: 'text-amber-300',  bg: 'bg-amber-500/10',  bd: 'border-amber-500/20',  strip: '#f59e0b' },
+  tech_debt:  { label: 'Deuda técnica', icon: '⚙️', fg: 'text-zinc-300',   bg: 'bg-zinc-500/10',   bd: 'border-zinc-500/20',   strip: '#71717a' },
+};
+const PRIORITIES = {
+  high:   { label: 'Alta',  dot: 'bg-red-500',    text: 'text-red-300',    bg: 'bg-red-500/10',    bd: 'border-red-500/30' },
+  medium: { label: 'Media', dot: 'bg-orange-500', text: 'text-orange-300', bg: 'bg-orange-500/10', bd: 'border-orange-500/30' },
+  low:    { label: 'Baja',  dot: 'bg-green-500',  text: 'text-green-300',  bg: 'bg-green-500/10',  bd: 'border-green-500/30' },
+};
+const SIZES = ['XS','S','M','L','XL'];
+
+const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Seed
+// ═══════════════════════════════════════════════════════════════════════════
+const SEED = [
+  { id: uid(), column: 'bugs', title: 'Simulación de paro cardiorrespiratorio no carga en Safari',
+    description: 'Al abrir la simulación SIM-204 desde iPad (Safari 17), el canvas queda en negro tras la pantalla de carga. Reproducible en 3 de 3 intentos.',
+    type: 'bug', priority: 'high', assignees: ['David'], size: 'M', version: 'v4.1', module: 'Simulaciones',
+    dueDate: '2026-05-15', links: [{ label: 'Loom repro', url: 'https://loom.com/...' }],
+    checklist: [{ id: uid(), text: 'Reproducir en iPad físico', done: true }, { id: uid(), text: 'Aislar WebGL context', done: false }, { id: uid(), text: 'PR de hotfix', done: false }],
+    comments: [{ id: uid(), author: 'Beatriz', text: 'Marta del Hospital Vall reportó lo mismo ayer. Urgente.', at: Date.now() - 1000*60*60*5 }],
+    createdAt: Date.now() - 1000*60*60*24*2 },
+  { id: uid(), column: 'todo_define', title: '¿Cómo medimos retención real de los residentes tras 6 meses?',
+    description: 'Tenemos pre/post inmediato, pero no sabemos cuánto retienen a medio plazo. Necesitamos definir métrica y vehículo (¿re-test? ¿simulación sorpresa?).',
+    type: 'feedback', priority: 'medium', assignees: ['Beatriz','David'], size: '', version: '', module: 'Simulaciones',
+    dueDate: '', links: [], checklist: [], comments: [], createdAt: Date.now() - 1000*60*60*24*1 },
+  { id: uid(), column: 'defined', title: 'Integrar resultados de simulación con el LMS via SCORM 2004',
+    description: 'Que la nota final del escenario se envíe al LMS del cliente. Spec adjunta en la doc de referencia.',
+    type: 'task', priority: 'medium', assignees: ['Dev'], size: 'XL', version: 'V5', module: 'LMS integration',
+    dueDate: '', links: [{ label: 'Spec SCORM', url: 'https://docs.google.com/...' }],
+    checklist: [{ id: uid(), text: 'Diseño del payload', done: false }, { id: uid(), text: 'Endpoint /lms/report', done: false }],
+    comments: [], createdAt: Date.now() - 1000*60*60*24*4 },
+  { id: uid(), column: 'in_progress', title: 'Migrar gestión de sesiones a httpOnly cookies',
+    description: 'Localstorage de tokens es deuda técnica. Riesgo XSS bajo pero existe.',
+    type: 'tech_debt', priority: 'medium', assignees: ['Dev'], size: 'L', version: 'v4.2', module: 'Auth',
+    dueDate: '', links: [], checklist: [{ id: uid(), text: 'Audit de uso actual', done: true }, { id: uid(), text: 'Backend: rotación', done: false }],
+    comments: [], createdAt: Date.now() - 1000*60*60*24*3 },
+  { id: uid(), column: 'review', title: 'Onboarding: nuevo flujo de 3 pasos para instructores',
+    description: 'Reducir el onboarding de 7 a 3 pasos. Pendiente revisión de diseño y copy.',
+    type: 'improvement', priority: 'medium', assignees: ['Beatriz','QA'], size: 'L', version: 'v4.1', module: 'Onboarding',
+    dueDate: '2026-05-12', links: [{ label: 'Figma v3', url: 'https://figma.com/...' }],
+    checklist: [{ id: uid(), text: 'Wireframes', done: true }, { id: uid(), text: 'Hi-fi', done: true }, { id: uid(), text: 'Copy en ES/EN', done: false }],
+    comments: [{ id: uid(), author: 'David', text: 'El paso 2 sigue pidiendo demasiados campos. ¿Movemos especialidad a "más tarde"?', at: Date.now() - 1000*60*60*20 }],
+    createdAt: Date.now() - 1000*60*60*24*6 },
+  { id: uid(), column: 'done', title: 'Dashboard del instructor: filtro por cohorte',
+    description: '', type: 'task', priority: 'low', assignees: ['David'], size: 'S', version: 'v4.0', module: 'Dashboard',
+    dueDate: '', links: [], checklist: [], comments: [], createdAt: Date.now() - 1000*60*60*24*10 },
+];
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Persistence + migration
+// ═══════════════════════════════════════════════════════════════════════════
+function migrateCard(c) {
+  return {
+    id: c.id || uid(),
+    column: c.column === 'backlog' ? 'defined' : c.column,
+    title: c.title || '', description: c.description || '',
+    type: c.type || 'task', priority: c.priority || 'medium',
+    assignees: Array.isArray(c.assignees) ? c.assignees : (c.assignee ? [c.assignee] : []),
+    size: c.size || '', version: c.version || c.sprint || '', module: c.module || '',
+    dueDate: c.dueDate || '', links: c.links || [],
+    checklist: c.checklist || [], comments: c.comments || [],
+    createdAt: c.createdAt || Date.now(), archived: !!c.archived, archivedAt: c.archivedAt || null,
+  };
+}
+function loadState() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) { const p = JSON.parse(raw); if (Array.isArray(p)) return p.map(migrateCard); }
+    const v1 = localStorage.getItem(STORAGE_KEY_V1);
+    if (v1) { const p = JSON.parse(v1); if (Array.isArray(p)) return p.map(migrateCard); }
+    return SEED;
+  } catch { return SEED; }
+}
+const save = (cards) => { try { localStorage.setItem(STORAGE_KEY, JSON.stringify(cards)); } catch {} };
+const loadActivity = () => { try { const r = localStorage.getItem(ACTIVITY_KEY); return r ? JSON.parse(r) : []; } catch { return []; } };
+const saveActivity = (a) => { try { localStorage.setItem(ACTIVITY_KEY, JSON.stringify(a.slice(0, ACTIVITY_MAX))); } catch {} };
+
+// ═══════════════════════════════════════════════════════════════════════════
+// UI atoms
+// ═══════════════════════════════════════════════════════════════════════════
+const Icon = ({ d, className = 'w-4 h-4' }) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" className={className}><path d={d}/></svg>
+);
+const I = {
+  plus:'M12 5v14M5 12h14', x:'M6 6l12 12M18 6L6 18',
+  trash:'M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m1 0v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6h14z',
+  arrowL:'M15 18l-6-6 6-6', arrowR:'M9 6l6 6-6 6',
+  search:'M21 21l-4.3-4.3M11 19a8 8 0 110-16 8 8 0 010 16z',
+  filter:'M22 3H2l8 9.5V19l4 2v-8.5L22 3z',
+  calendar:'M19 4H5a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2V6a2 2 0 00-2-2zM16 2v4M8 2v4M3 10h18',
+  link:'M10 13a5 5 0 007.07 0l3-3a5 5 0 00-7.07-7.07l-1 1M14 11a5 5 0 00-7.07 0l-3 3a5 5 0 007.07 7.07l1-1',
+  chat:'M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2v10z',
+  check:'M20 6L9 17l-5-5', user:'M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2M12 11a4 4 0 100-8 4 4 0 000 8z',
+  info:'M12 16v-4M12 8h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
+  list:'M9 6h11M9 12h11M9 18h11M5 6v.01M5 12v.01M5 18v.01',
+  flag:'M4 22V4M4 4h12l-2 4 2 4H4', layers:'M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5',
+  archive:'M21 8v13H3V8M1 3h22v5H1zM10 12h4',
+  history:'M3 12a9 9 0 109-9 9.74 9.74 0 00-7 3.5L3 8M3 3v5h5M12 7v5l3 2',
+  bug:'M8 2l1.88 1.88M14.12 3.88L16 2M9 7h6M16 13a4 4 0 11-8 0V9a4 4 0 018 0v4zM4 14H2M4 18l2-2M22 14h-2M20 18l-2-2',
+};
+
+const Btn = ({ children, onClick, variant = 'ghost', size = 'md', className = '', title, disabled, type = 'button' }) => {
+  const s = { sm:'px-2 py-1 text-xs gap-1.5', md:'px-3 py-1.5 text-sm gap-2', lg:'px-4 py-2 text-sm gap-2' }[size];
+  const v = {
+    primary:'bg-indigo-500 hover:bg-indigo-400 text-white shadow-sm shadow-indigo-500/20',
+    ghost:'bg-transparent hover:bg-zinc-800 text-zinc-300',
+    soft:'bg-zinc-800/70 hover:bg-zinc-700/70 text-zinc-200 border border-zinc-700/60',
+    danger:'bg-red-500/10 hover:bg-red-500/20 text-red-300 border border-red-500/30',
+    outline:'bg-transparent hover:bg-zinc-800 text-zinc-300 border border-zinc-800',
+  }[variant];
+  return <button type={type} title={title} disabled={disabled} onClick={onClick}
+    className={`inline-flex items-center justify-center rounded-md font-medium transition-colors ring-focus disabled:opacity-40 disabled:cursor-not-allowed ${s} ${v} ${className}`}>{children}</button>;
+};
+
+const Field = ({ label, children, hint }) => (
+  <label className="block">
+    <div className="flex items-center justify-between mb-1.5">
+      <span className="text-[11px] uppercase tracking-wider text-zinc-500 font-medium">{label}</span>
+      {hint && <span className="text-[11px] text-zinc-600">{hint}</span>}
+    </div>{children}
+  </label>
+);
+const Input = (p) => <input {...p} className={`w-full bg-zinc-900/60 border border-zinc-800 rounded-md px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-600 ring-focus ${p.className||''}`}/>;
+const TextArea = (p) => <textarea {...p} className={`w-full bg-zinc-900/60 border border-zinc-800 rounded-md px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-600 ring-focus ${p.className||''}`}/>;
+const Select = ({ children, ...p }) => (
+  <select {...p} className={`w-full appearance-none bg-zinc-900/60 border border-zinc-800 rounded-md px-3 py-2 text-sm text-zinc-100 ring-focus pr-8 ${p.className||''}`}
+    style={{ backgroundImage:"url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2371717a' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M6 9l6 6 6-6'/></svg>\")", backgroundRepeat:'no-repeat', backgroundPosition:'right 0.6rem center' }}>{children}</select>
+);
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AutoInput — text input with autocomplete suggestions
+// ═══════════════════════════════════════════════════════════════════════════
+function AutoInput({ value, onChange, suggestions = [], placeholder, className = '', mono = false }) {
+  const [open, setOpen] = useState(false);
+  const [highlight, setHighlight] = useState(0);
+  const ref = useRef(null);
+  const filtered = useMemo(() => {
+    const q = (value || '').trim().toLowerCase();
+    const base = suggestions.filter(s => s && s.toLowerCase() !== q);
+    if (!q) return base.slice(0, 8);
+    return base.filter(s => s.toLowerCase().includes(q)).slice(0, 8);
+  }, [value, suggestions]);
+
+  useEffect(() => {
+    const onDoc = (e) => { if (!ref.current?.contains(e.target)) setOpen(false); };
+    document.addEventListener('mousedown', onDoc);
+    return () => document.removeEventListener('mousedown', onDoc);
+  }, []);
+  useEffect(() => { setHighlight(0); }, [value]);
+
+  const choose = (s) => { onChange(s); setOpen(false); };
+  const onKey = (e) => {
+    if (!open || !filtered.length) return;
+    if (e.key === 'ArrowDown') { e.preventDefault(); setHighlight(h => (h+1) % filtered.length); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); setHighlight(h => (h-1+filtered.length) % filtered.length); }
+    else if (e.key === 'Enter' && filtered[highlight]) { e.preventDefault(); choose(filtered[highlight]); }
+    else if (e.key === 'Escape') { setOpen(false); }
+  };
+
+  return (
+    <div ref={ref} className="relative">
+      <input
+        value={value || ''}
+        onChange={e => { onChange(e.target.value); setOpen(true); }}
+        onFocus={() => setOpen(true)}
+        onKeyDown={onKey}
+        placeholder={placeholder}
+        className={`w-full bg-zinc-900/60 border border-zinc-800 rounded-md px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-600 ring-focus ${mono ? 'mono' : ''} ${className}`}
+      />
+      {open && filtered.length > 0 && (
+        <div className="absolute left-0 right-0 top-full mt-1 z-30 bg-zinc-950 border border-zinc-800 rounded-md shadow-xl py-1 max-h-56 overflow-y-auto anim-up">
+          {filtered.map((s, i) => (
+            <button key={s} type="button" onMouseDown={(e) => { e.preventDefault(); choose(s); }}
+              onMouseEnter={() => setHighlight(i)}
+              className={`w-full text-left px-3 py-1.5 text-xs ${mono ? 'mono' : ''} ${i === highlight ? 'bg-zinc-900 text-indigo-300' : 'text-zinc-300'}`}>
+              {s}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// TagInput — chips with autocomplete (for assignees)
+// ═══════════════════════════════════════════════════════════════════════════
+function TagInput({ values = [], onChange, suggestions = [], placeholder }) {
+  const [draft, setDraft] = useState('');
+  const [open, setOpen] = useState(false);
+  const [highlight, setHighlight] = useState(0);
+  const ref = useRef(null);
+  const filtered = useMemo(() => {
+    const q = draft.trim().toLowerCase();
+    const base = suggestions.filter(s => s && !values.includes(s));
+    if (!q) return base.slice(0, 8);
+    return base.filter(s => s.toLowerCase().includes(q)).slice(0, 8);
+  }, [draft, suggestions, values]);
+
+  useEffect(() => {
+    const onDoc = (e) => { if (!ref.current?.contains(e.target)) setOpen(false); };
+    document.addEventListener('mousedown', onDoc);
+    return () => document.removeEventListener('mousedown', onDoc);
+  }, []);
+  useEffect(() => { setHighlight(0); }, [draft]);
+
+  const commit = (raw) => {
+    const v = raw.trim();
+    if (!v || values.includes(v)) { setDraft(''); return; }
+    onChange([...values, v]);
+    setDraft('');
+  };
+  const remove = (v) => onChange(values.filter(x => x !== v));
+
+  const onKey = (e) => {
+    if (e.key === 'Enter' || e.key === ',') {
+      e.preventDefault();
+      const pick = open && filtered[highlight] ? filtered[highlight] : draft;
+      commit(pick);
+    } else if (e.key === 'Backspace' && !draft && values.length) {
+      remove(values[values.length - 1]);
+    } else if (open && filtered.length) {
+      if (e.key === 'ArrowDown') { e.preventDefault(); setHighlight(h => (h+1) % filtered.length); }
+      else if (e.key === 'ArrowUp') { e.preventDefault(); setHighlight(h => (h-1+filtered.length) % filtered.length); }
+      else if (e.key === 'Escape') { setOpen(false); }
+    }
+  };
+
+  return (
+    <div ref={ref} className="relative">
+      <div className="flex flex-wrap items-center gap-1 bg-zinc-900/60 border border-zinc-800 rounded-md px-2 py-1.5 focus-within:shadow-[0_0_0_2px_#0a0a0b,0_0_0_4px_rgba(129,140,248,.45)]">
+        {values.map(v => (
+          <span key={v} className="inline-flex items-center gap-1 rounded bg-zinc-800 border border-zinc-700/60 text-[11.5px] text-zinc-200 pl-1.5 pr-1 py-0.5">
+            <AvatarDot name={v} size={4}/>
+            <span>{v}</span>
+            <button type="button" onClick={() => remove(v)} className="text-zinc-500 hover:text-red-400 -mr-0.5"><Icon d={I.x} className="w-3 h-3"/></button>
+          </span>
+        ))}
+        <input
+          value={draft}
+          onChange={e => { setDraft(e.target.value); setOpen(true); }}
+          onFocus={() => setOpen(true)}
+          onBlur={() => { if (draft.trim()) commit(draft); }}
+          onKeyDown={onKey}
+          placeholder={values.length ? '' : placeholder}
+          className="flex-1 min-w-[80px] bg-transparent text-sm text-zinc-100 placeholder:text-zinc-600 outline-none px-1 py-0.5"
+        />
+      </div>
+      {open && filtered.length > 0 && (
+        <div className="absolute left-0 right-0 top-full mt-1 z-30 bg-zinc-950 border border-zinc-800 rounded-md shadow-xl py-1 max-h-56 overflow-y-auto anim-up">
+          {filtered.map((s, i) => (
+            <button key={s} type="button" onMouseDown={(e) => { e.preventDefault(); commit(s); }}
+              onMouseEnter={() => setHighlight(i)}
+              className={`w-full text-left px-3 py-1.5 text-xs flex items-center gap-2 ${i === highlight ? 'bg-zinc-900 text-indigo-300' : 'text-zinc-300'}`}>
+              <AvatarDot name={s} size={5}/>{s}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Avatar bits
+// ═══════════════════════════════════════════════════════════════════════════
+function hueFromName(name) { let h=0; for (let i=0;i<name.length;i++) h=(h*31+name.charCodeAt(i))%360; return h; }
+function initialsOf(name) { return name.trim().split(/\s+/).map(w => w[0]).slice(0,2).join('').toUpperCase() || '·'; }
+function AvatarDot({ name, size = 5 }) {
+  const h = hueFromName(name);
+  const px = size * 4;
+  return <span className="inline-flex items-center justify-center rounded-full text-[9px] font-semibold text-zinc-50"
+    style={{ width: px, height: px, background: `oklch(0.45 0.09 ${h})`, boxShadow:'inset 0 0 0 1px rgba(255,255,255,0.08)' }}>{initialsOf(name)}</span>;
+}
+function AssigneeStack({ names = [], max = 3 }) {
+  if (!names.length) return null;
+  const shown = names.slice(0, max);
+  const rest = names.length - shown.length;
+  return (
+    <div className="inline-flex items-center">
+      <div className="flex -space-x-1.5">
+        {shown.map(n => (
+          <span key={n} title={n} className="inline-flex items-center justify-center w-5 h-5 rounded-full text-[9px] font-semibold text-zinc-50 border border-zinc-950"
+            style={{ background: `oklch(0.45 0.09 ${hueFromName(n)})` }}>{initialsOf(n)}</span>
+        ))}
+        {rest > 0 && (
+          <span title={names.slice(max).join(', ')} className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-zinc-800 border border-zinc-950 text-[9px] font-medium text-zinc-300">+{rest}</span>
+        )}
+      </div>
+      {names.length === 1 && <span className="ml-1.5 text-[11px] text-zinc-300 truncate max-w-[80px]">{names[0]}</span>}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Chips
+// ═══════════════════════════════════════════════════════════════════════════
+const TypeChip = ({ type, size = 'md' }) => {
+  const t = TYPES[type] || TYPES.task;
+  const s = size === 'sm' ? 'text-[10px] px-1.5 py-0.5' : 'text-[11px] px-2 py-0.5';
+  return <span className={`inline-flex items-center gap-1 rounded-md border ${t.bg} ${t.bd} ${t.fg} ${s} font-medium`}><span>{t.icon}</span><span>{t.label}</span></span>;
+};
+const PriorityChip = ({ priority }) => {
+  const p = PRIORITIES[priority] || PRIORITIES.medium;
+  return <span className={`inline-flex items-center gap-1.5 rounded-md border ${p.bg} ${p.bd} ${p.text} text-[11px] px-2 py-0.5 font-medium`}>
+    <span className={`w-1.5 h-1.5 rounded-full ${p.dot}`}></span>{p.label}</span>;
+};
+const SizeChip = ({ size }) => size ? <span className="mono text-[10px] font-medium text-zinc-400 bg-zinc-800/80 border border-zinc-700/60 rounded px-1.5 py-0.5">{size}</span> : null;
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Card
+// ═══════════════════════════════════════════════════════════════════════════
+function Card({ card, onOpen, onMove, onArchive, onDelete, dragHandlers, isDragging, columnIndex, allowMoveLeft, allowMoveRight }) {
+  const checklistDone = card.checklist?.filter(c => c.done).length || 0;
+  const checklistTotal = card.checklist?.length || 0;
+  const overdue = card.dueDate && card.column !== 'done' && new Date(card.dueDate).getTime() < Date.now() - 86400000;
+  const dueSoon = card.dueDate && !overdue && card.column !== 'done' && new Date(card.dueDate).getTime() < Date.now() + 86400000*3;
+
+  return (
+    <div draggable {...dragHandlers} onClick={() => onOpen(card)}
+      className={`card group relative bg-zinc-900/80 border border-zinc-800 rounded-lg p-3 cursor-pointer select-none anim-up ${isDragging ? 'card-dragging' : ''}`}>
+      <div className="absolute left-0 top-0 bottom-0 w-[3px] rounded-l-lg" style={{ background: TYPES[card.type]?.strip || '#71717a' }}/>
+
+      <div className="flex items-start justify-between gap-2 mb-2">
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <TypeChip type={card.type} size="sm" />
+          {card.module && (
+            <span className="inline-flex items-center gap-1 text-[10px] text-zinc-400 bg-zinc-800/60 border border-zinc-800 rounded px-1.5 py-0.5">
+              <Icon d={I.layers} className="w-2.5 h-2.5" />{card.module}
+            </span>
+          )}
+        </div>
+        <button onClick={(e) => { e.stopPropagation(); card.column === 'done' ? onArchive(card.id) : onDelete(card.id); }}
+          className="opacity-0 group-hover:opacity-100 text-zinc-500 hover:text-red-400 transition-opacity p-1 -m-1"
+          title={card.column === 'done' ? 'Archivar' : 'Eliminar'}>
+          <Icon d={card.column === 'done' ? I.archive : I.trash} className="w-3.5 h-3.5"/>
+        </button>
+      </div>
+
+      <h4 className="text-[13.5px] font-medium text-zinc-100 leading-snug mb-2 text-balance">{card.title}</h4>
+      {card.description && <p className="text-[12px] text-zinc-400 leading-snug mb-2 line-clamp-2">{card.description}</p>}
+
+      <div className="flex items-center gap-1.5 flex-wrap mb-2.5">
+        <PriorityChip priority={card.priority} />
+        <SizeChip size={card.size} />
+        {card.version && (
+          <span className="mono text-[10px] text-indigo-300 bg-indigo-500/10 border border-indigo-500/20 rounded px-1.5 py-0.5">{card.version}</span>
+        )}
+      </div>
+
+      <div className="flex items-center justify-between gap-2 text-[11px] text-zinc-500 pt-2 border-t border-zinc-800/80">
+        <div className="flex items-center gap-2.5">
+          {checklistTotal > 0 && (
+            <span className={`inline-flex items-center gap-1 ${checklistDone === checklistTotal ? 'text-emerald-400' : ''}`} title="Checklist">
+              <Icon d={I.list} className="w-3 h-3"/>{checklistDone}/{checklistTotal}
+            </span>
+          )}
+          {card.comments?.length > 0 && <span className="inline-flex items-center gap-1" title="Comentarios"><Icon d={I.chat} className="w-3 h-3"/>{card.comments.length}</span>}
+          {card.links?.length > 0 && <span className="inline-flex items-center gap-1" title="Links"><Icon d={I.link} className="w-3 h-3"/>{card.links.length}</span>}
+          {card.dueDate && (
+            <span className={`inline-flex items-center gap-1 ${overdue ? 'text-red-400' : dueSoon ? 'text-amber-300' : 'text-zinc-500'}`} title="Fecha límite">
+              <Icon d={I.calendar} className="w-3 h-3"/>{formatShortDate(card.dueDate)}
+            </span>
+          )}
+        </div>
+        <AssigneeStack names={card.assignees} max={3}/>
+      </div>
+
+      <div className="opacity-0 group-hover:opacity-100 transition-opacity absolute -bottom-2.5 right-2 flex bg-zinc-950 border border-zinc-800 rounded-md shadow-lg">
+        <button onClick={(e) => { e.stopPropagation(); onMove(card.id, -1); }} disabled={!allowMoveLeft}
+          className="p-1 text-zinc-400 hover:text-indigo-300 hover:bg-zinc-800 rounded-l-md disabled:opacity-30 disabled:hover:bg-transparent" title="Mover izquierda">
+          <Icon d={I.arrowL} className="w-3.5 h-3.5"/>
+        </button>
+        <div className="w-px bg-zinc-800"></div>
+        <button onClick={(e) => { e.stopPropagation(); onMove(card.id, 1); }} disabled={!allowMoveRight}
+          className="p-1 text-zinc-400 hover:text-indigo-300 hover:bg-zinc-800 rounded-r-md disabled:opacity-30 disabled:hover:bg-transparent" title="Mover derecha">
+          <Icon d={I.arrowR} className="w-3.5 h-3.5"/>
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Column info popover
+// ═══════════════════════════════════════════════════════════════════════════
+function InfoButton({ text }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  useEffect(() => {
+    const onDoc = (e) => { if (!ref.current?.contains(e.target)) setOpen(false); };
+    document.addEventListener('mousedown', onDoc);
+    return () => document.removeEventListener('mousedown', onDoc);
+  }, []);
+  return (
+    <div ref={ref} className="relative">
+      <button onClick={() => setOpen(o => !o)}
+        className={`p-1 rounded transition-colors ${open ? 'bg-zinc-800 text-indigo-300' : 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-900'}`}
+        title="Propósito de la columna">
+        <Icon d={I.info} className="w-3.5 h-3.5"/>
+      </button>
+      {open && (
+        <div className="absolute left-0 top-full mt-1.5 z-30 w-64 bg-zinc-950 border border-zinc-800 rounded-md shadow-xl p-3 anim-up">
+          <p className="text-[12px] text-zinc-300 leading-snug">{text}</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Column
+// ═══════════════════════════════════════════════════════════════════════════
+function Column({ col, cards, onAdd, onOpen, onMove, onDelete, onArchive, dragState, onDragOver, onDrop, onDragStart, onDragEnd, columnIndex }) {
+  const isOver = dragState.overCol === col.id;
+  const isBugs = col.id === 'bugs';
+  return (
+    <div className={`flex flex-col min-w-[300px] w-[300px] bg-zinc-950/40 border ${isBugs ? 'border-rose-500/15 bugs-col' : 'border-zinc-900'} rounded-xl ${isOver ? 'col-drag-over' : ''}`}
+      onDragOver={(e) => { e.preventDefault(); onDragOver(col.id); }}
+      onDrop={(e) => { e.preventDefault(); onDrop(col.id); }}>
+      <div className="flex items-center justify-between px-3 py-2.5 border-b border-zinc-900">
+        <div className="flex items-center gap-2 min-w-0">
+          {isBugs ? <Icon d={I.bug} className="w-3.5 h-3.5 text-rose-400 shrink-0"/> : <span className="w-2 h-2 rounded-full shrink-0" style={{ background: col.dot }}></span>}
+          <h3 className={`text-[13px] font-semibold tracking-tight truncate ${isBugs ? 'text-rose-200' : 'text-zinc-200'}`}>{col.title}</h3>
+          <span className="mono text-[11px] text-zinc-500 bg-zinc-900 border border-zinc-800 rounded px-1.5 py-0.5 shrink-0">{cards.length}</span>
+          <InfoButton text={col.info}/>
+        </div>
+        <button onClick={() => onAdd(col.id)} className="text-zinc-500 hover:text-indigo-300 hover:bg-zinc-900 rounded p-1 transition-colors" title="Nueva tarjeta">
+          <Icon d={I.plus} className="w-4 h-4"/>
+        </button>
+      </div>
+
+      <div className="flex-1 overflow-y-auto p-2 space-y-2 min-h-[200px]">
+        {cards.length === 0 && <div className="text-center py-8 px-4"><p className="text-[11px] text-zinc-600 mono">vacío</p></div>}
+        {cards.map(card => {
+          const flowIdx = FLOW_COLUMNS.indexOf(card.column);
+          const allowL = isBugs ? false : flowIdx > 0;
+          const allowR = isBugs ? false : flowIdx >= 0 && flowIdx < FLOW_COLUMNS.length - 1;
+          return (
+            <Card key={card.id} card={card} columnIndex={columnIndex}
+              onOpen={onOpen} onMove={onMove} onDelete={onDelete} onArchive={onArchive}
+              isDragging={dragState.id === card.id}
+              allowMoveLeft={allowL} allowMoveRight={allowR}
+              dragHandlers={{
+                onDragStart: (e) => { e.dataTransfer.effectAllowed = 'move'; onDragStart(card.id); },
+                onDragEnd: onDragEnd,
+              }}/>
+          );
+        })}
+      </div>
+
+      <button onClick={() => onAdd(col.id)}
+        className="m-2 mt-0 px-3 py-2 text-[12px] text-zinc-500 hover:text-indigo-300 hover:bg-zinc-900 border border-dashed border-zinc-800 hover:border-indigo-500/30 rounded-md transition-colors flex items-center justify-center gap-1.5">
+        <Icon d={I.plus} className="w-3.5 h-3.5"/> Añadir tarjeta
+      </button>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Editor modal
+// ═══════════════════════════════════════════════════════════════════════════
+function Editor({ card, suggestions, onClose, onSave, onArchive, onDelete }) {
+  const [draft, setDraft] = useState(card);
+  const [commentText, setCommentText] = useState('');
+  const [commentAuthor, setCommentAuthor] = useState(localStorage.getItem(ME_KEY) || '');
+  const [newCheck, setNewCheck] = useState('');
+  const titleRef = useRef(null);
+  const isNew = card.__isNew;
+
+  useEffect(() => {
+    if (isNew) titleRef.current?.focus();
+    const onKey = (e) => {
+      if (e.key === 'Escape') onClose();
+      if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) doSave();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
+  const update = (patch) => setDraft(d => ({ ...d, ...patch }));
+  const doSave = () => { if (!draft.title.trim()) { titleRef.current?.focus(); return; } onSave(draft); };
+
+  const addCheck = () => { if (!newCheck.trim()) return; update({ checklist:[...(draft.checklist||[]), { id: uid(), text: newCheck.trim(), done: false }] }); setNewCheck(''); };
+  const toggleCheck = (id) => update({ checklist: draft.checklist.map(c => c.id === id ? { ...c, done: !c.done } : c) });
+  const delCheck = (id) => update({ checklist: draft.checklist.filter(c => c.id !== id) });
+
+  const addComment = () => {
+    if (!commentText.trim()) return;
+    const author = commentAuthor.trim() || 'Yo';
+    localStorage.setItem(ME_KEY, author);
+    update({ comments:[...(draft.comments||[]), { id: uid(), author, text: commentText.trim(), at: Date.now() }] });
+    setCommentText('');
+  };
+  const delComment = (id) => update({ comments: draft.comments.filter(c => c.id !== id) });
+
+  const addLink = () => update({ links:[...(draft.links||[]), { label:'', url:'' }] });
+  const updLink = (i, patch) => update({ links: draft.links.map((l, idx) => idx === i ? { ...l, ...patch } : l) });
+  const delLink = (i) => update({ links: draft.links.filter((_, idx) => idx !== i) });
+
+  const checklistDone = draft.checklist?.filter(c => c.done).length || 0;
+  const checklistTotal = draft.checklist?.length || 0;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4 sm:p-8 bg-black/60 backdrop-blur-sm anim-fade" onClick={onClose}>
+      <div className="bg-zinc-950 border border-zinc-800 rounded-xl shadow-2xl w-full max-w-3xl my-auto anim-pop" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-5 py-3 border-b border-zinc-900">
+          <div className="flex items-center gap-2 text-xs text-zinc-500">
+            <span className="mono">{isNew ? 'Nueva tarjeta' : 'Editando'}</span>
+            <span className="text-zinc-700">·</span>
+            <span>{COLUMNS.find(c => c.id === draft.column)?.title}</span>
+            {!isNew && <><span className="text-zinc-700">·</span><span>creado {formatRelative(draft.createdAt)}</span></>}
+            {draft.archived && <><span className="text-zinc-700">·</span><span className="text-amber-300">archivada</span></>}
+          </div>
+          <button onClick={onClose} className="text-zinc-500 hover:text-zinc-200 p-1"><Icon d={I.x} className="w-4 h-4"/></button>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-[1fr_240px]">
+          <div className="p-5 space-y-5">
+            <input ref={titleRef} value={draft.title} onChange={e => update({ title: e.target.value })}
+              placeholder="Título de la tarjeta"
+              className="w-full bg-transparent border-0 outline-none text-xl font-semibold text-zinc-100 placeholder:text-zinc-700 ring-focus rounded px-1 -ml-1"/>
+
+            <Field label="Descripción">
+              <TextArea value={draft.description} onChange={e => update({ description: e.target.value })}
+                placeholder="Contexto, pasos de reproducción, criterios de aceptación…" rows={4}/>
+            </Field>
+
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2"><Icon d={I.list} className="w-4 h-4 text-zinc-500"/><span className="text-[11px] uppercase tracking-wider text-zinc-500 font-medium">Checklist</span></div>
+                {checklistTotal > 0 && <span className="mono text-[11px] text-zinc-500">{checklistDone}/{checklistTotal}</span>}
+              </div>
+              {checklistTotal > 0 && (
+                <div className="mb-2 h-1 bg-zinc-900 rounded-full overflow-hidden">
+                  <div className="h-full bg-emerald-500/70 transition-all" style={{ width: `${(checklistDone/checklistTotal)*100}%` }}/>
+                </div>
+              )}
+              <div className="space-y-1.5">
+                {(draft.checklist||[]).map(item => (
+                  <div key={item.id} className="group flex items-center gap-2 px-2 py-1 rounded-md hover:bg-zinc-900/50">
+                    <button onClick={() => toggleCheck(item.id)} className={`shrink-0 w-4 h-4 rounded border flex items-center justify-center transition-colors ${item.done ? 'bg-emerald-500 border-emerald-500' : 'border-zinc-700 hover:border-zinc-500'}`}>
+                      {item.done && <Icon d={I.check} className="w-3 h-3 text-white"/>}
+                    </button>
+                    <span className={`flex-1 text-sm ${item.done ? 'text-zinc-500 line-through' : 'text-zinc-200'}`}>{item.text}</span>
+                    <button onClick={() => delCheck(item.id)} className="opacity-0 group-hover:opacity-100 text-zinc-500 hover:text-red-400 p-0.5"><Icon d={I.x} className="w-3 h-3"/></button>
+                  </div>
+                ))}
+              </div>
+              <div className="flex gap-2 mt-2">
+                <Input value={newCheck} onChange={e => setNewCheck(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addCheck(); } }}
+                  placeholder="Añadir paso…" className="text-sm"/>
+                <Btn onClick={addCheck} variant="soft" size="sm">Añadir</Btn>
+              </div>
+            </div>
+
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2"><Icon d={I.link} className="w-4 h-4 text-zinc-500"/><span className="text-[11px] uppercase tracking-wider text-zinc-500 font-medium">Adjuntos / Links</span></div>
+                <button onClick={addLink} className="text-[11px] text-indigo-400 hover:text-indigo-300 inline-flex items-center gap-1"><Icon d={I.plus} className="w-3 h-3"/>añadir</button>
+              </div>
+              <div className="space-y-1.5">
+                {(draft.links||[]).map((link, i) => (
+                  <div key={i} className="flex items-center gap-1.5">
+                    <Input value={link.label} onChange={e => updLink(i, { label: e.target.value })} placeholder="Figma, Loom…" className="w-32 text-xs"/>
+                    <Input value={link.url} onChange={e => updLink(i, { url: e.target.value })} placeholder="https://…" className="flex-1 text-xs mono"/>
+                    <button onClick={() => delLink(i)} className="text-zinc-500 hover:text-red-400 p-1"><Icon d={I.x} className="w-3.5 h-3.5"/></button>
+                  </div>
+                ))}
+                {(draft.links||[]).length === 0 && <p className="text-[11px] text-zinc-600 italic">Sin links · solo URLs (Figma, Loom, docs)</p>}
+              </div>
+            </div>
+
+            <div>
+              <div className="flex items-center gap-2 mb-2">
+                <Icon d={I.chat} className="w-4 h-4 text-zinc-500"/>
+                <span className="text-[11px] uppercase tracking-wider text-zinc-500 font-medium">Comentarios</span>
+                {(draft.comments||[]).length > 0 && <span className="mono text-[11px] text-zinc-500">· {draft.comments.length}</span>}
+              </div>
+              <div className="space-y-2 mb-3">
+                {(draft.comments||[]).map(c => (
+                  <div key={c.id} className="group flex gap-2.5 text-sm">
+                    <span className="inline-flex items-center gap-1.5 text-[11px] text-zinc-300 shrink-0">
+                      <AvatarDot name={c.author}/>{c.author}
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-baseline justify-between gap-2">
+                        <span className="text-[10px] text-zinc-500 mono">{formatRelative(c.at)}</span>
+                        <button onClick={() => delComment(c.id)} className="opacity-0 group-hover:opacity-100 text-zinc-500 hover:text-red-400 text-[10px]">eliminar</button>
+                      </div>
+                      <p className="text-[13px] text-zinc-300 leading-snug mt-0.5 whitespace-pre-wrap break-words">{c.text}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="bg-zinc-900/50 border border-zinc-800 rounded-md p-2 space-y-2">
+                <div className="flex gap-2">
+                  <input value={commentAuthor} onChange={e => setCommentAuthor(e.target.value)} placeholder="Quién eres"
+                    className="w-24 bg-transparent text-[11px] text-zinc-300 placeholder:text-zinc-600 border-b border-zinc-800 px-1 py-1 ring-focus"/>
+                  <span className="text-[11px] text-zinc-600 self-end pb-1">· comentando</span>
+                </div>
+                <TextArea value={commentText} onChange={e => setCommentText(e.target.value)}
+                  placeholder="Escribe un comentario…" rows={2}
+                  className="border-0 bg-transparent text-sm"
+                  onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) addComment(); }}/>
+                <div className="flex justify-end"><Btn onClick={addComment} variant="primary" size="sm" disabled={!commentText.trim()}>Comentar</Btn></div>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-zinc-950 md:border-l border-t md:border-t-0 border-zinc-900 p-5 space-y-4">
+            <Field label="Estado">
+              <Select value={draft.column} onChange={e => update({ column: e.target.value })}>
+                {COLUMNS.map(c => <option key={c.id} value={c.id}>{c.title}</option>)}
+              </Select>
+            </Field>
+            <Field label="Tipo">
+              <Select value={draft.type} onChange={e => update({ type: e.target.value })}>
+                {Object.entries(TYPES).map(([id, t]) => <option key={id} value={id}>{t.icon} {t.label}</option>)}
+              </Select>
+            </Field>
+            <Field label="Prioridad">
+              <div className="grid grid-cols-3 gap-1">
+                {Object.entries(PRIORITIES).map(([id, p]) => (
+                  <button key={id} onClick={() => update({ priority: id })}
+                    className={`flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md border text-xs transition-colors ${draft.priority === id ? `${p.bg} ${p.bd} ${p.text}` : 'border-zinc-800 text-zinc-500 hover:border-zinc-700 hover:text-zinc-300'}`}>
+                    <span className={`w-1.5 h-1.5 rounded-full ${p.dot}`}></span>{p.label}
+                  </button>
+                ))}
+              </div>
+            </Field>
+            <Field label="Responsables" hint="múltiples">
+              <TagInput values={draft.assignees || []} onChange={v => update({ assignees: v })}
+                suggestions={suggestions.assignees} placeholder="David, Beatriz, Dev…"/>
+            </Field>
+            <Field label="Esfuerzo" hint="talla de camiseta">
+              <div className="grid grid-cols-5 gap-1">
+                {SIZES.map(s => (
+                  <button key={s} onClick={() => update({ size: draft.size === s ? '' : s })}
+                    className={`mono text-xs py-1.5 rounded border transition-colors ${draft.size === s ? 'bg-indigo-500/20 border-indigo-500/40 text-indigo-300' : 'border-zinc-800 text-zinc-500 hover:border-zinc-700 hover:text-zinc-300'}`}>{s}</button>
+                ))}
+              </div>
+            </Field>
+            <Field label="Versión" hint="V3, v4.1…">
+              <AutoInput value={draft.version} onChange={v => update({ version: v })}
+                suggestions={suggestions.versions} placeholder="V4, v4.1…" mono/>
+            </Field>
+            <Field label="Módulo / área">
+              <AutoInput value={draft.module} onChange={v => update({ module: v })}
+                suggestions={suggestions.modules} placeholder="Simulaciones, LMS…"/>
+            </Field>
+            <Field label="Fecha límite" hint="opcional">
+              <Input type="date" value={draft.dueDate || ''} onChange={e => update({ dueDate: e.target.value })} className="mono"/>
+            </Field>
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between px-5 py-3 border-t border-zinc-900 bg-zinc-950/50 rounded-b-xl">
+          <div className="flex items-center gap-2">
+            {!isNew && !draft.archived && (
+              <Btn variant="outline" size="sm" onClick={() => { if (confirm('¿Archivar esta tarjeta? Quedará en el histórico.')) onArchive(draft.id); }}>
+                <Icon d={I.archive} className="w-3.5 h-3.5"/> Archivar
+              </Btn>
+            )}
+            {!isNew && (
+              <Btn variant="danger" size="sm" onClick={() => { if (confirm('¿Eliminar permanentemente esta tarjeta?')) onDelete(draft.id); }}>
+                <Icon d={I.trash} className="w-3.5 h-3.5"/> Eliminar
+              </Btn>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] text-zinc-600 mono mr-2 hidden sm:inline">⌘+Enter para guardar</span>
+            <Btn variant="ghost" size="md" onClick={onClose}>Cancelar</Btn>
+            <Btn variant="primary" size="md" onClick={doSave}>Guardar</Btn>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Helpers
+// ═══════════════════════════════════════════════════════════════════════════
+function formatShortDate(iso) { if (!iso) return ''; return new Date(iso).toLocaleDateString('es-ES', { day:'2-digit', month:'short' }); }
+function formatRelative(ts) {
+  if (!ts) return '';
+  const diff = Date.now() - ts;
+  const m=60_000, h=60*m, day=24*h;
+  if (diff < m) return 'ahora';
+  if (diff < h) return `hace ${Math.floor(diff/m)} min`;
+  if (diff < day) return `hace ${Math.floor(diff/h)} h`;
+  if (diff < 7*day) return `hace ${Math.floor(diff/day)} d`;
+  return new Date(ts).toLocaleDateString('es-ES', { day:'2-digit', month:'short' });
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Filter bar
+// ═══════════════════════════════════════════════════════════════════════════
+function FilterBar({ suggestions, filters, setFilters }) {
+  const activeCount = (filters.assignee ? 1 : 0) + filters.types.length + (filters.priority ? 1 : 0) + (filters.version ? 1 : 0) + (filters.module ? 1 : 0) + (filters.search ? 1 : 0);
+  return (
+    <div className="flex items-center gap-2 flex-wrap">
+      <div className="relative">
+        <Icon d={I.search} className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-500"/>
+        <input value={filters.search} onChange={e => setFilters({ ...filters, search: e.target.value })} placeholder="Buscar…"
+          className="bg-zinc-900/60 border border-zinc-800 rounded-md pl-7 pr-3 py-1.5 text-xs text-zinc-200 placeholder:text-zinc-500 w-44 ring-focus"/>
+      </div>
+
+      <Dropdown label={filters.assignee || 'Responsable'} active={!!filters.assignee} icon={I.user}>
+        <DropItem selected={!filters.assignee} onClick={() => setFilters({ ...filters, assignee:'' })}>Todos</DropItem>
+        <div className="h-px bg-zinc-800 my-1"/>
+        {suggestions.assignees.map(a => (
+          <DropItem key={a} selected={filters.assignee === a} onClick={() => setFilters({ ...filters, assignee: a })}>
+            <span className="inline-flex items-center gap-1.5"><AvatarDot name={a} size={4}/>{a}</span>
+          </DropItem>
+        ))}
+        {suggestions.assignees.length === 0 && <div className="px-3 py-2 text-xs text-zinc-600 italic">Sin responsables aún</div>}
+      </Dropdown>
+
+      <Dropdown label={filters.types.length ? `Tipo · ${filters.types.length}` : 'Tipo'} active={filters.types.length > 0} icon={I.filter}>
+        {Object.entries(TYPES).map(([id, t]) => {
+          const checked = filters.types.includes(id);
+          return (
+            <DropItem key={id} selected={checked} onClick={() => {
+              const next = checked ? filters.types.filter(x => x !== id) : [...filters.types, id];
+              setFilters({ ...filters, types: next });
+            }}><span className="mr-1.5">{t.icon}</span>{t.label}</DropItem>
+          );
+        })}
+      </Dropdown>
+
+      <Dropdown label={filters.priority ? `Prioridad: ${PRIORITIES[filters.priority].label}` : 'Prioridad'} active={!!filters.priority} icon={I.flag}>
+        <DropItem selected={!filters.priority} onClick={() => setFilters({ ...filters, priority:'' })}>Todas</DropItem>
+        <div className="h-px bg-zinc-800 my-1"/>
+        {Object.entries(PRIORITIES).map(([id, p]) => (
+          <DropItem key={id} selected={filters.priority === id} onClick={() => setFilters({ ...filters, priority: id })}>
+            <span className={`w-1.5 h-1.5 rounded-full ${p.dot} mr-2 inline-block`}></span>{p.label}
+          </DropItem>
+        ))}
+      </Dropdown>
+
+      <Dropdown label={filters.version || 'Versión'} active={!!filters.version} icon={I.layers}>
+        <DropItem selected={!filters.version} onClick={() => setFilters({ ...filters, version:'' })}>Todas</DropItem>
+        {suggestions.versions.length > 0 && <div className="h-px bg-zinc-800 my-1"/>}
+        {suggestions.versions.map(v => (
+          <DropItem key={v} selected={filters.version === v} onClick={() => setFilters({ ...filters, version: v })}>
+            <span className="mono">{v}</span>
+          </DropItem>
+        ))}
+        {suggestions.versions.length === 0 && <div className="px-3 py-2 text-xs text-zinc-600 italic">Sin versiones aún</div>}
+      </Dropdown>
+
+      <Dropdown label={filters.module || 'Módulo'} active={!!filters.module} icon={I.layers}>
+        <DropItem selected={!filters.module} onClick={() => setFilters({ ...filters, module:'' })}>Todos</DropItem>
+        {suggestions.modules.length > 0 && <div className="h-px bg-zinc-800 my-1"/>}
+        {suggestions.modules.map(m => (
+          <DropItem key={m} selected={filters.module === m} onClick={() => setFilters({ ...filters, module: m })}>{m}</DropItem>
+        ))}
+        {suggestions.modules.length === 0 && <div className="px-3 py-2 text-xs text-zinc-600 italic">Sin módulos aún</div>}
+      </Dropdown>
+
+      {activeCount > 0 && (
+        <button onClick={() => setFilters({ search:'', assignee:'', types:[], priority:'', version:'', module:'' })}
+          className="text-[11px] text-zinc-500 hover:text-zinc-300 inline-flex items-center gap-1 px-2 py-1.5">
+          <Icon d={I.x} className="w-3 h-3"/> Limpiar
+        </button>
+      )}
+    </div>
+  );
+}
+
+function Dropdown({ label, active, icon, children }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  useEffect(() => {
+    const onDoc = (e) => { if (!ref.current?.contains(e.target)) setOpen(false); };
+    document.addEventListener('mousedown', onDoc);
+    return () => document.removeEventListener('mousedown', onDoc);
+  }, []);
+  return (
+    <div ref={ref} className="relative">
+      <button onClick={() => setOpen(o => !o)}
+        className={`inline-flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-md border transition-colors ${active ? 'bg-indigo-500/10 border-indigo-500/30 text-indigo-300' : 'bg-zinc-900/60 border-zinc-800 text-zinc-300 hover:border-zinc-700'}`}>
+        {icon && <Icon d={icon} className="w-3 h-3"/>}{label}<Icon d="M6 9l6 6 6-6" className="w-3 h-3 opacity-60"/>
+      </button>
+      {open && <div className="absolute z-30 left-0 mt-1 min-w-[180px] max-h-72 overflow-y-auto bg-zinc-950 border border-zinc-800 rounded-md shadow-xl py-1 anim-up">{children}</div>}
+    </div>
+  );
+}
+function DropItem({ children, selected, onClick }) {
+  return (
+    <button onClick={onClick} className={`w-full text-left px-3 py-1.5 text-xs flex items-center justify-between hover:bg-zinc-900 ${selected ? 'text-indigo-300' : 'text-zinc-300'}`}>
+      <span className="inline-flex items-center">{children}</span>
+      {selected && <Icon d={I.check} className="w-3 h-3"/>}
+    </button>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Side drawer (Activity, Archive)
+// ═══════════════════════════════════════════════════════════════════════════
+function Drawer({ open, onClose, title, icon, children }) {
+  if (!open) return null;
+  return (
+    <div className="fixed inset-0 z-40" onClick={onClose}>
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px] anim-fade"></div>
+      <aside className="absolute right-0 top-0 bottom-0 w-full max-w-md bg-zinc-950 border-l border-zinc-800 anim-slide-right flex flex-col" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-5 py-3 border-b border-zinc-900">
+          <div className="flex items-center gap-2">
+            <Icon d={icon} className="w-4 h-4 text-zinc-400"/>
+            <h2 className="text-sm font-semibold text-zinc-100">{title}</h2>
+          </div>
+          <button onClick={onClose} className="text-zinc-500 hover:text-zinc-200 p-1"><Icon d={I.x} className="w-4 h-4"/></button>
+        </div>
+        <div className="flex-1 overflow-y-auto">{children}</div>
+      </aside>
+    </div>
+  );
+}
+
+function ActivityPanel({ activity, onClose }) {
+  const byDay = useMemo(() => {
+    const groups = {};
+    for (const e of activity) {
+      const d = new Date(e.at);
+      const key = d.toLocaleDateString('es-ES', { weekday:'long', day:'2-digit', month:'long' });
+      (groups[key] = groups[key] || []).push(e);
+    }
+    return groups;
+  }, [activity]);
+
+  return (
+    <Drawer open={true} onClose={onClose} title="Log de actividad" icon={I.history}>
+      {activity.length === 0 ? (
+        <div className="p-8 text-center"><p className="text-sm text-zinc-500">Sin actividad reciente.</p><p className="text-[11px] text-zinc-600 mt-1">Los movimientos entre columnas aparecerán aquí.</p></div>
+      ) : (
+        <div className="p-5 space-y-5">
+          {Object.entries(byDay).map(([day, entries]) => (
+            <div key={day}>
+              <h3 className="text-[10px] uppercase tracking-wider text-zinc-500 font-medium mb-2">{day}</h3>
+              <ul className="relative space-y-2 border-l border-zinc-900 pl-4">
+                {entries.map(e => (
+                  <li key={e.id} className="relative">
+                    <span className="absolute -left-[1.1rem] top-1.5 w-2 h-2 rounded-full bg-zinc-700"></span>
+                    <div className="flex items-start gap-2 text-[12px] leading-snug">
+                      <AvatarDot name={e.who || 'Sistema'} size={4}/>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-zinc-300">
+                          <span className="font-medium text-zinc-100">{e.who || 'Sistema'}</span>{' '}
+                          {e.action === 'move' && <>movió <span className="text-zinc-200">"{e.cardTitle}"</span> de <span className="text-zinc-400">{e.fromTitle}</span> a <span className="text-indigo-300">{e.toTitle}</span></>}
+                          {e.action === 'create' && <>creó <span className="text-zinc-200">"{e.cardTitle}"</span> en <span className="text-zinc-400">{e.toTitle}</span></>}
+                          {e.action === 'archive' && <>archivó <span className="text-zinc-200">"{e.cardTitle}"</span></>}
+                          {e.action === 'restore' && <>restauró <span className="text-zinc-200">"{e.cardTitle}"</span></>}
+                          {e.action === 'delete' && <>eliminó <span className="text-zinc-200">"{e.cardTitle}"</span></>}
+                        </div>
+                        <div className="text-[10px] text-zinc-500 mono mt-0.5">{formatRelative(e.at)} · {new Date(e.at).toLocaleTimeString('es-ES', { hour:'2-digit', minute:'2-digit' })}</div>
+                      </div>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+      )}
+    </Drawer>
+  );
+}
+
+function ArchivePanel({ cards, onRestore, onDelete, onOpen, onClose }) {
+  const archived = cards.filter(c => c.archived).sort((a, b) => (b.archivedAt||0) - (a.archivedAt||0));
+  return (
+    <Drawer open={true} onClose={onClose} title={`Archivo · ${archived.length}`} icon={I.archive}>
+      {archived.length === 0 ? (
+        <div className="p-8 text-center"><p className="text-sm text-zinc-500">No hay tarjetas archivadas.</p><p className="text-[11px] text-zinc-600 mt-1">Las tarjetas completadas quedan aquí como histórico.</p></div>
+      ) : (
+        <div className="p-3 space-y-2">
+          {archived.map(c => (
+            <div key={c.id} className="group bg-zinc-900/60 border border-zinc-800 rounded-md p-3 hover:border-zinc-700 transition-colors">
+              <div className="flex items-start justify-between gap-2 mb-1.5">
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <TypeChip type={c.type} size="sm"/>
+                  {c.version && <span className="mono text-[10px] text-indigo-300 bg-indigo-500/10 border border-indigo-500/20 rounded px-1.5 py-0.5">{c.version}</span>}
+                </div>
+                <span className="text-[10px] text-zinc-500 mono shrink-0">{formatRelative(c.archivedAt)}</span>
+              </div>
+              <button onClick={() => onOpen(c)} className="text-[13px] font-medium text-zinc-100 leading-snug text-left hover:text-indigo-300">{c.title}</button>
+              <div className="flex items-center justify-between mt-2 pt-2 border-t border-zinc-800/80">
+                <AssigneeStack names={c.assignees} max={3}/>
+                <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <button onClick={() => onRestore(c.id)} className="text-[11px] text-indigo-400 hover:text-indigo-300 px-2 py-0.5">Restaurar</button>
+                  <button onClick={() => { if (confirm('¿Eliminar permanentemente?')) onDelete(c.id); }} className="text-[11px] text-red-400 hover:text-red-300 px-2 py-0.5">Eliminar</button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </Drawer>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// App
+// ═══════════════════════════════════════════════════════════════════════════
+function App() {
+  const [cards, setCards] = useState(loadState);
+  const [editing, setEditing] = useState(null);
+  const [activity, setActivity] = useState(loadActivity);
+  const [showActivity, setShowActivity] = useState(false);
+  const [showArchive, setShowArchive] = useState(false);
+  const [me, setMe] = useState(localStorage.getItem(ME_KEY) || '');
+  const [filters, setFilters] = useState({ search:'', assignee:'', types:[], priority:'', version:'', module:'' });
+  const [drag, setDrag] = useState({ id:null, overCol:null });
+
+  useEffect(() => { save(cards); }, [cards]);
+  useEffect(() => { saveActivity(activity); }, [activity]);
+
+  // Suggestions for autocomplete (build from all cards, archived included)
+  const suggestions = useMemo(() => {
+    const asSet = new Set(), vSet = new Set(), mSet = new Set();
+    for (const c of cards) {
+      (c.assignees || []).forEach(a => a && asSet.add(a));
+      if (c.version) vSet.add(c.version);
+      if (c.module) mSet.add(c.module);
+    }
+    const sortVersions = (arr) => arr.sort((a, b) => {
+      const pa = a.replace(/^v/i,'').split('.').map(Number);
+      const pb = b.replace(/^v/i,'').split('.').map(Number);
+      for (let i=0;i<Math.max(pa.length,pb.length);i++) {
+        if ((pa[i]||0) !== (pb[i]||0)) return (pa[i]||0) - (pb[i]||0);
+      }
+      return 0;
+    });
+    return {
+      assignees: [...asSet].sort((a,b) => a.localeCompare(b, 'es')),
+      versions: sortVersions([...vSet]),
+      modules: [...mSet].sort((a,b) => a.localeCompare(b, 'es')),
+    };
+  }, [cards]);
+
+  const visibleCards = useMemo(() => cards.filter(c => !c.archived), [cards]);
+
+  const filtered = useMemo(() => visibleCards.filter(c => {
+    if (filters.search) {
+      const q = filters.search.toLowerCase();
+      const blob = `${c.title} ${c.description} ${(c.assignees||[]).join(' ')} ${c.module} ${c.version}`.toLowerCase();
+      if (!blob.includes(q)) return false;
+    }
+    if (filters.assignee && !(c.assignees||[]).includes(filters.assignee)) return false;
+    if (filters.types.length && !filters.types.includes(c.type)) return false;
+    if (filters.priority && c.priority !== filters.priority) return false;
+    if (filters.version && c.version !== filters.version) return false;
+    if (filters.module && c.module !== filters.module) return false;
+    return true;
+  }), [visibleCards, filters]);
+
+  const cardsByCol = useMemo(() => {
+    const m = Object.fromEntries(COLUMNS.map(c => [c.id, []]));
+    for (const c of filtered) (m[c.column] || m.defined).push(c);
+    return m;
+  }, [filtered]);
+
+  const logEvent = (entry) => setActivity(a => [{ id: uid(), at: Date.now(), who: me || (localStorage.getItem(ME_KEY) || ''), ...entry }, ...a]);
+
+  const addCard = (columnId) => {
+    setEditing({
+      id: uid(), column: columnId, title:'', description:'',
+      type: columnId === 'bugs' ? 'bug' : 'task',
+      priority:'medium', assignees:[], size:'', version:'', module:'',
+      dueDate:'', links:[], checklist:[], comments:[],
+      createdAt: Date.now(), archived: false, archivedAt: null,
+      __isNew: true,
+    });
+  };
+
+  const saveCard = (draft) => {
+    const { __isNew, ...clean } = draft;
+    const colTitle = (id) => COLUMNS.find(c => c.id === id)?.title || id;
+    setCards(prev => {
+      if (__isNew) {
+        logEvent({ action:'create', cardId: clean.id, cardTitle: clean.title, toTitle: colTitle(clean.column) });
+        return [clean, ...prev];
+      }
+      const before = prev.find(c => c.id === clean.id);
+      if (before && before.column !== clean.column) {
+        logEvent({ action:'move', cardId: clean.id, cardTitle: clean.title,
+          from: before.column, to: clean.column, fromTitle: colTitle(before.column), toTitle: colTitle(clean.column) });
+      }
+      return prev.map(c => c.id === clean.id ? clean : c);
+    });
+    setEditing(null);
+  };
+
+  const deleteCard = (id) => {
+    setCards(prev => {
+      const c = prev.find(x => x.id === id);
+      if (c) logEvent({ action:'delete', cardId: id, cardTitle: c.title });
+      return prev.filter(x => x.id !== id);
+    });
+    setEditing(null);
+  };
+  const archiveCard = (id) => {
+    setCards(prev => prev.map(c => {
+      if (c.id !== id) return c;
+      logEvent({ action:'archive', cardId: id, cardTitle: c.title });
+      return { ...c, archived: true, archivedAt: Date.now() };
+    }));
+    setEditing(null);
+  };
+  const restoreCard = (id) => {
+    setCards(prev => prev.map(c => {
+      if (c.id !== id) return c;
+      logEvent({ action:'restore', cardId: id, cardTitle: c.title });
+      return { ...c, archived: false, archivedAt: null, column: c.column === 'bugs' ? 'bugs' : 'done' };
+    }));
+  };
+
+  const moveCard = (id, delta) => {
+    setCards(prev => prev.map(c => {
+      if (c.id !== id) return c;
+      if (c.column === 'bugs') return c; // bugs column doesn't flow
+      const idx = FLOW_COLUMNS.indexOf(c.column);
+      if (idx < 0) return c;
+      const next = Math.max(0, Math.min(FLOW_COLUMNS.length - 1, idx + delta));
+      if (FLOW_COLUMNS[next] === c.column) return c;
+      const colTitle = (id) => COLUMNS.find(x => x.id === id)?.title || id;
+      logEvent({ action:'move', cardId: c.id, cardTitle: c.title,
+        from: c.column, to: FLOW_COLUMNS[next], fromTitle: colTitle(c.column), toTitle: colTitle(FLOW_COLUMNS[next]) });
+      return { ...c, column: FLOW_COLUMNS[next] };
+    }));
+  };
+
+  const onDragStart = (id) => setDrag({ id, overCol:null });
+  const onDragOver = (colId) => setDrag(d => d.overCol === colId ? d : { ...d, overCol: colId });
+  const onDragEnd = () => setDrag({ id:null, overCol:null });
+  const onDrop = (colId) => {
+    if (drag.id) {
+      setCards(prev => prev.map(c => {
+        if (c.id !== drag.id) return c;
+        if (c.column === colId) return c;
+        const colTitle = (id) => COLUMNS.find(x => x.id === id)?.title || id;
+        logEvent({ action:'move', cardId: c.id, cardTitle: c.title,
+          from: c.column, to: colId, fromTitle: colTitle(c.column), toTitle: colTitle(colId) });
+        return { ...c, column: colId };
+      }));
+    }
+    setDrag({ id:null, overCol:null });
+  };
+
+  const totals = useMemo(() => ({
+    total: visibleCards.length,
+    active: visibleCards.filter(c => c.column !== 'done').length,
+    bugs: visibleCards.filter(c => c.column === 'bugs').length,
+    overdue: visibleCards.filter(c => c.dueDate && c.column !== 'done' && new Date(c.dueDate).getTime() < Date.now() - 86400000).length,
+    archived: cards.filter(c => c.archived).length,
+  }), [cards, visibleCards]);
+
+  const onMeChange = (v) => { setMe(v); localStorage.setItem(ME_KEY, v); };
+
+  return (
+    <div className="min-h-screen flex flex-col">
+      <header className="border-b border-zinc-900 bg-zinc-950/80 backdrop-blur sticky top-0 z-20">
+        <div className="px-5 py-3 flex items-center justify-between gap-4 flex-wrap">
+          <div className="flex items-center gap-3">
+            <div className="w-7 h-7 rounded-md bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center shadow-sm shadow-indigo-500/30">
+              <svg viewBox="0 0 24 24" className="w-4 h-4 text-white" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M6 4v16M14 4v10M18 4v16M10 4v6"/></svg>
+            </div>
+            <div>
+              <h1 className="text-sm font-semibold text-zinc-100 tracking-tight leading-none">Task Manager</h1>
+              <p className="text-[11px] text-zinc-500 mt-0.5 leading-none">Producto &amp; Desarrollo · MetaMedics</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-4 text-[11px] text-zinc-500 flex-wrap">
+            <Stat label="Total" value={totals.total}/>
+            <Stat label="Activas" value={totals.active}/>
+            <Stat label="Bugs" value={totals.bugs} accent={totals.bugs > 0 ? 'text-rose-300' : ''}/>
+            <Stat label="Vencidas" value={totals.overdue} accent={totals.overdue > 0 ? 'text-red-300' : ''}/>
+            <Stat label="Archivadas" value={totals.archived}/>
+            <div className="flex items-center gap-1.5">
+              <span className="w-px h-4 bg-zinc-800"></span>
+              <input value={me} onChange={e => onMeChange(e.target.value)} placeholder="Soy…"
+                className="w-24 bg-zinc-900/60 border border-zinc-800 rounded px-2 py-1 text-[11px] text-zinc-200 placeholder:text-zinc-600 ring-focus" title="Tu identidad para el log de actividad"/>
+            </div>
+          </div>
+        </div>
+        <div className="px-5 pb-3 flex items-center justify-between gap-3 flex-wrap">
+          <FilterBar suggestions={suggestions} filters={filters} setFilters={setFilters}/>
+          <div className="flex items-center gap-2">
+            <Btn variant="outline" size="md" onClick={() => setShowActivity(true)} title="Log de actividad">
+              <Icon d={I.history} className="w-4 h-4"/><span className="hidden sm:inline">Actividad</span>
+            </Btn>
+            <Btn variant="outline" size="md" onClick={() => setShowArchive(true)} title="Archivo">
+              <Icon d={I.archive} className="w-4 h-4"/><span className="hidden sm:inline">Archivo</span>
+              {totals.archived > 0 && <span className="mono text-[10px] bg-zinc-800 rounded px-1 ml-0.5">{totals.archived}</span>}
+            </Btn>
+            <Btn variant="primary" size="md" onClick={() => addCard('defined')}>
+              <Icon d={I.plus} className="w-4 h-4"/> Nueva tarjeta
+            </Btn>
+          </div>
+        </div>
+      </header>
+
+      <main className="flex-1 overflow-x-auto p-5">
+        <div className="flex gap-4 h-full min-h-[600px]">
+          {COLUMNS.map((col, idx) => (
+            <Column key={col.id} col={col} columnIndex={idx}
+              cards={cardsByCol[col.id] || []}
+              onAdd={addCard} onOpen={setEditing} onMove={moveCard}
+              onDelete={deleteCard} onArchive={archiveCard}
+              dragState={drag} onDragStart={onDragStart} onDragOver={onDragOver} onDragEnd={onDragEnd} onDrop={onDrop}/>
+          ))}
+        </div>
+      </main>
+
+      <footer className="border-t border-zinc-900 px-5 py-2 text-[10px] text-zinc-600 mono flex justify-between">
+        <span>local · {visibleCards.length} activas · {totals.archived} archivadas</span>
+        <span>drag &amp; drop · ↑↓ mover · clic para editar</span>
+      </footer>
+
+      {editing && (
+        <Editor card={editing} suggestions={suggestions}
+          onClose={() => setEditing(null)} onSave={saveCard}
+          onArchive={archiveCard} onDelete={deleteCard}/>
+      )}
+      {showActivity && <ActivityPanel activity={activity} onClose={() => setShowActivity(false)}/>}
+      {showArchive && <ArchivePanel cards={cards} onRestore={restoreCard} onDelete={deleteCard} onOpen={(c) => { setShowArchive(false); setEditing(c); }} onClose={() => setShowArchive(false)}/>}
+    </div>
+  );
+}
+
+function Stat({ label, value, accent }) {
+  return (
+    <div className="flex items-baseline gap-1.5">
+      <span className={`mono text-sm font-semibold ${accent || 'text-zinc-200'}`}>{value}</span>
+      <span className="text-[10px] uppercase tracking-wider text-zinc-500">{label}</span>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>

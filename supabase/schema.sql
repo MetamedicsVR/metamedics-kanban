@@ -66,7 +66,7 @@ insert into cards (column_id, title, description, type, priority, assignees, siz
   'M', 'v4.1', 'Simulaciones', '2026-05-15',
   '[{"label":"Loom repro","url":"https://loom.com/..."}]',
   '[{"id":"c1","text":"Reproducir en iPad físico","done":true},{"id":"c2","text":"Aislar WebGL context","done":false},{"id":"c3","text":"PR de hotfix","done":false}]',
-  '[{"id":"cm1","author":"Beatriz","text":"Marta del Hospital Vall reportó lo mismo ayer. Urgente.","at":' || (extract(epoch from now() - interval '5 hours') * 1000)::bigint || '}]'
+  ('[{"id":"cm1","author":"Beatriz","text":"Marta del Hospital Vall reportó lo mismo ayer. Urgente.","at":' || (extract(epoch from now() - interval '5 hours') * 1000)::bigint || '}]')::jsonb
 ),
 (
   'todo_define',
@@ -106,7 +106,7 @@ insert into cards (column_id, title, description, type, priority, assignees, siz
   'L', 'v4.1', 'Onboarding', '2026-05-12',
   '[{"label":"Figma v3","url":"https://figma.com/..."}]',
   '[{"id":"c8","text":"Wireframes","done":true},{"id":"c9","text":"Hi-fi","done":true},{"id":"c10","text":"Copy en ES/EN","done":false}]',
-  '[{"id":"cm2","author":"David","text":"El paso 2 sigue pidiendo demasiados campos. ¿Movemos especialidad a \"más tarde\"?","at":' || (extract(epoch from now() - interval '20 hours') * 1000)::bigint || '}]'
+  ('[{"id":"cm2","author":"David","text":"El paso 2 sigue pidiendo demasiados campos. ¿Movemos especialidad a \"más tarde\"?","at":' || (extract(epoch from now() - interval '20 hours') * 1000)::bigint || '}]')::jsonb
 ),
 (
   'done',

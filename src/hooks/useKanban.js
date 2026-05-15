@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { fromDb, toDb, activityFromDb } from '../utils'
 import { COLUMNS, ME_KEY } from '../constants'
@@ -24,6 +24,10 @@ export function useKanban() {
   const [activity, setActivity] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+
+  // Ref so callbacks always see the latest cards without stale closures
+  const cardsRef = useRef(cards)
+  useEffect(() => { cardsRef.current = cards }, [cards])
 
   // Initial load
   useEffect(() => {
@@ -73,7 +77,6 @@ export function useKanban() {
   }, [])
 
   const createCard = useCallback(async (card) => {
-    // Optimistic insert
     setCards(prev => [card, ...prev])
     const { error } = await supabase.from('cards').insert(toDb(card))
     if (error) {
@@ -84,7 +87,6 @@ export function useKanban() {
   }, [])
 
   const updateCard = useCallback(async (card, prevColumn) => {
-    // Optimistic update
     setCards(prev => prev.map(c => c.id === card.id ? card : c))
     const { error } = await supabase.from('cards').update(toDb(card)).eq('id', card.id)
     if (error) throw error
@@ -98,74 +100,92 @@ export function useKanban() {
   }, [])
 
   const archiveCard = useCallback(async (id) => {
-    setCards(prev => prev.map(c => {
-      if (c.id !== id) return c
-      const updated = { ...c, archived: true, archivedAt: Date.now() }
-      logActivity({ action: 'archive', cardId: id, cardTitle: c.title })
-      return updated
-    }))
+    const card = cardsRef.current.find(c => c.id === id)
+    if (!card) return
+    const updated = { ...card, archived: true, archivedAt: Date.now() }
+    setCards(prev => prev.map(c => c.id === id ? updated : c))
     await supabase.from('cards').update({
       archived: true,
       archived_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     }).eq('id', id)
+    await logActivity({ action: 'archive', cardId: id, cardTitle: card.title })
   }, [])
 
   const restoreCard = useCallback(async (id) => {
-    setCards(prev => prev.map(c => {
-      if (c.id !== id) return c
-      const updated = { ...c, archived: false, archivedAt: null }
-      logActivity({ action: 'restore', cardId: id, cardTitle: c.title })
-      return updated
-    }))
+    const card = cardsRef.current.find(c => c.id === id)
+    if (!card) return
+    const updated = { ...card, archived: false, archivedAt: null }
+    setCards(prev => prev.map(c => c.id === id ? updated : c))
     await supabase.from('cards').update({
       archived: false,
       archived_at: null,
       updated_at: new Date().toISOString(),
     }).eq('id', id)
+    await logActivity({ action: 'restore', cardId: id, cardTitle: card.title })
   }, [])
 
   const deleteCard = useCallback(async (id) => {
-    setCards(prev => {
-      const c = prev.find(x => x.id === id)
-      if (c) logActivity({ action: 'delete', cardId: id, cardTitle: c.title })
-      return prev.filter(x => x.id !== id)
-    })
+    const card = cardsRef.current.find(c => c.id === id)
+    setCards(prev => prev.filter(c => c.id !== id))
     await supabase.from('cards').delete().eq('id', id)
+    if (card) await logActivity({ action: 'delete', cardId: id, cardTitle: card.title })
   }, [])
 
   const moveCard = useCallback(async (id, delta, flowColumns) => {
-    setCards(prev => {
-      const card = prev.find(c => c.id === id)
-      if (!card || card.column === 'bugs') return prev
-      const idx = flowColumns.indexOf(card.column)
-      if (idx < 0) return prev
-      const next = Math.max(0, Math.min(flowColumns.length - 1, idx + delta))
-      if (flowColumns[next] === card.column) return prev
-      const newCol = flowColumns[next]
-      logActivity({
-        action: 'move', cardId: id, cardTitle: card.title,
-        from: card.column, to: newCol,
-        fromTitle: colTitle(card.column), toTitle: colTitle(newCol),
-      })
-      const updated = { ...card, column: newCol }
-      supabase.from('cards').update({ column_id: newCol, updated_at: new Date().toISOString() }).eq('id', id)
-      return prev.map(c => c.id === id ? updated : c)
+    const card = cardsRef.current.find(c => c.id === id)
+    if (!card || card.column === 'bugs') return
+    const idx = flowColumns.indexOf(card.column)
+    if (idx < 0) return
+    const next = Math.max(0, Math.min(flowColumns.length - 1, idx + delta))
+    const newCol = flowColumns[next]
+    if (newCol === card.column) return
+
+    // Optimistic update
+    setCards(prev => prev.map(c => c.id === id ? { ...c, column: newCol } : c))
+
+    // Persist to Supabase
+    const { error } = await supabase.from('cards')
+      .update({ column_id: newCol, updated_at: new Date().toISOString() })
+      .eq('id', id)
+
+    if (error) {
+      // Rollback on failure
+      setCards(prev => prev.map(c => c.id === id ? { ...c, column: card.column } : c))
+      console.error('Failed to move card:', error)
+      return
+    }
+
+    await logActivity({
+      action: 'move', cardId: id, cardTitle: card.title,
+      from: card.column, to: newCol,
+      fromTitle: colTitle(card.column), toTitle: colTitle(newCol),
     })
   }, [])
 
   const dropCard = useCallback(async (id, toColumnId) => {
-    setCards(prev => {
-      const card = prev.find(c => c.id === id)
-      if (!card || card.column === toColumnId) return prev
-      logActivity({
-        action: 'move', cardId: id, cardTitle: card.title,
-        from: card.column, to: toColumnId,
-        fromTitle: colTitle(card.column), toTitle: colTitle(toColumnId),
-      })
-      const updated = { ...card, column: toColumnId }
-      supabase.from('cards').update({ column_id: toColumnId, updated_at: new Date().toISOString() }).eq('id', id)
-      return prev.map(c => c.id === id ? updated : c)
+    const card = cardsRef.current.find(c => c.id === id)
+    if (!card || card.column === toColumnId) return
+
+    // Optimistic update
+    setCards(prev => prev.map(c => c.id === id ? { ...c, column: toColumnId } : c))
+
+    // Persist to Supabase
+    const { error } = await supabase.from('cards')
+      .update({ column_id: toColumnId, updated_at: new Date().toISOString() })
+      .eq('id', id)
+
+    if (error) {
+      // Rollback on failure
+      setCards(prev => prev.map(c => c.id === id ? { ...c, column: card.column } : c))
+      console.error('Failed to drop card:', error)
+      return
+    }
+
+    await logActivity({
+      action: 'move', cardId: id, cardTitle: card.title,
+      from: card.column, to: toColumnId,
+      fromTitle: colTitle(card.column), toTitle: colTitle(toColumnId),
     })
   }, [])
 

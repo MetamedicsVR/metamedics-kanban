@@ -270,6 +270,25 @@ export const SizeChip = ({ size }) => size
   ? <span className="mono text-[10px] font-medium text-zinc-400 bg-zinc-800/80 border border-zinc-700/60 rounded px-1.5 py-0.5">{size}</span>
   : null
 
+export const ModuleChip = ({ module, size = 'sm' }) => {
+  if (!module) return null
+  const hue = hueFromName(module)
+  const s = size === 'sm' ? 'text-[10px] px-1.5 py-0.5' : 'text-[11px] px-2 py-0.5'
+  return (
+    <span
+      className={`inline-flex items-center gap-1 rounded-md border font-medium ${s}`}
+      style={{
+        color: `oklch(0.82 0.11 ${hue})`,
+        background: `oklch(0.82 0.11 ${hue} / 0.10)`,
+        borderColor: `oklch(0.82 0.11 ${hue} / 0.25)`,
+      }}
+    >
+      <Icon d={I.layers} className="w-2.5 h-2.5" />
+      {module}
+    </span>
+  )
+}
+
 // ─── InfoButton ───────────────────────────────────────────────────────────────
 export function InfoButton({ text }) {
   const [open, setOpen] = useState(false)

@@ -1,6 +1,6 @@
 import { TYPES } from '../constants'
 import { formatShortDate } from '../utils'
-import { Icon, I, TypeChip, PriorityChip, SizeChip, AssigneeStack } from './ui'
+import { Icon, I, TypeChip, PriorityChip, SizeChip, ModuleChip, AssigneeStack } from './ui'
 
 export default function Card({ card, onOpen, onMove, onArchive, onDelete, dragHandlers, isDragging, allowMoveLeft, allowMoveRight }) {
   const checklistDone = card.checklist?.filter(c => c.done).length || 0
@@ -17,11 +17,7 @@ export default function Card({ card, onOpen, onMove, onArchive, onDelete, dragHa
       <div className="flex items-start justify-between gap-2 mb-2">
         <div className="flex items-center gap-1.5 flex-wrap">
           <TypeChip type={card.type} size="sm" />
-          {card.module && (
-            <span className="inline-flex items-center gap-1 text-[10px] text-zinc-400 bg-zinc-800/60 border border-zinc-800 rounded px-1.5 py-0.5">
-              <Icon d={I.layers} className="w-2.5 h-2.5" />{card.module}
-            </span>
-          )}
+          <ModuleChip module={card.module} />
         </div>
         <button
           onClick={e => { e.stopPropagation(); card.column === 'done' ? onArchive(card.id) : onDelete(card.id) }}

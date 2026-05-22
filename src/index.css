@@ -50,3 +50,22 @@ textarea { resize: vertical; }
 .card:hover { transform: translateY(-1px); border-color: #3f3f46; }
 
 .bugs-col { background: linear-gradient(180deg, rgba(244, 63, 94, 0.04) 0%, transparent 80%); }
+
+/* ─── Rich text editor content ─────────────────────────────────────────────── */
+.rich-editor p { margin: 0 0 0.25rem 0; }
+.rich-editor p:last-child { margin-bottom: 0; }
+.rich-editor strong { font-weight: 600; color: #f4f4f5; }
+.rich-editor em { font-style: italic; }
+.rich-editor u { text-decoration: underline; }
+.rich-editor ul { list-style-type: disc; padding-left: 1.25rem; margin: 0.25rem 0; }
+.rich-editor ol { list-style-type: decimal; padding-left: 1.25rem; margin: 0.25rem 0; }
+.rich-editor li { margin-bottom: 0.1rem; }
+.rich-editor li p { margin: 0; }
+
+/* Rendered HTML in card previews */
+.card-description strong { font-weight: 600; }
+.card-description em { font-style: italic; }
+.card-description u { text-decoration: underline; }
+.card-description ul { list-style-type: disc; padding-left: 1rem; }
+.card-description ol { list-style-type: decimal; padding-left: 1rem; }
+.card-description li { display: list-item; }

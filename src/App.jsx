@@ -1,14 +1,15 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, lazy, Suspense } from 'react'
 import { COLUMNS, FLOW_COLUMNS, ME_KEY } from './constants'
 import { uid } from './utils'
 import { useKanban } from './hooks/useKanban'
 import { supabaseConfigured } from './lib/supabase'
 import Column from './components/Column'
-import Editor from './components/Editor'
 import FilterBar from './components/FilterBar'
 import ActivityPanel from './components/ActivityPanel'
 import ArchivePanel from './components/ArchivePanel'
 import { Btn, Icon, I } from './components/ui'
+
+const Editor = lazy(() => import('./components/Editor'))
 
 function Stat({ label, value, accent }) {
   return (
@@ -226,9 +227,11 @@ export default function App() {
       </footer>
 
       {editing && (
-        <Editor card={editing} suggestions={suggestions}
-          onClose={() => setEditing(null)} onSave={saveCard}
-          onArchive={archiveCard} onDelete={deleteCard} />
+        <Suspense fallback={null}>
+          <Editor card={editing} suggestions={suggestions}
+            onClose={() => setEditing(null)} onSave={saveCard}
+            onArchive={archiveCard} onDelete={deleteCard} />
+        </Suspense>
       )}
       {showActivity && <ActivityPanel activity={kanban.activity} onClose={() => setShowActivity(false)} />}
       {showArchive && (

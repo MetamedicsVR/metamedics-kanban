@@ -33,7 +33,8 @@ export default function Card({ card, onOpen, onMove, onArchive, onDelete, dragHa
 
       <h4 className="text-[13.5px] font-medium text-zinc-100 leading-snug mb-2 text-balance">{card.title}</h4>
       {card.description && (
-        <p className="text-[12px] text-zinc-400 leading-snug mb-2 line-clamp-2">{card.description}</p>
+        <div className="card-description text-[12px] text-zinc-400 leading-snug mb-2 line-clamp-3"
+          dangerouslySetInnerHTML={{ __html: card.description }} />
       )}
 
       <div className="flex items-center gap-1.5 flex-wrap mb-2.5">

@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { COLUMNS, TYPES, PRIORITIES, SIZES, ME_KEY } from '../constants'
 import { uid, formatRelative } from '../utils'
 import { Btn, Field, Input, TextArea, Select, AutoInput, TagInput, Icon, I, AvatarDot } from './ui'
+import RichTextEditor from './RichTextEditor'
 
 export default function Editor({ card, suggestions, onClose, onSave, onArchive, onDelete }) {
   const [draft, setDraft] = useState(card)
@@ -77,8 +78,12 @@ export default function Editor({ card, suggestions, onClose, onSave, onArchive, 
               className="w-full bg-transparent border-0 outline-none text-xl font-semibold text-zinc-100 placeholder:text-zinc-700 ring-focus rounded px-1 -ml-1" />
 
             <Field label="Descripción">
-              <TextArea value={draft.description} onChange={e => update({ description: e.target.value })}
-                placeholder="Contexto, pasos de reproducción, criterios de aceptación…" rows={4} />
+              <RichTextEditor
+                key={draft.id}
+                value={draft.description}
+                onChange={v => update({ description: v })}
+                placeholder="Contexto, pasos de reproducción, criterios de aceptación…"
+              />
             </Field>
 
             {/* Checklist */}

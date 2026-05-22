@@ -69,3 +69,9 @@ textarea { resize: vertical; }
 .card-description ul { list-style-type: disc; padding-left: 1rem; }
 .card-description ol { list-style-type: decimal; padding-left: 1rem; }
 .card-description li { display: list-item; }
+.card-description pre { background: #09090b; border: 1px solid #27272a; border-radius: 6px; padding: 0.4rem 0.6rem; overflow-x: auto; }
+.card-description pre code { font-family: 'Geist Mono', ui-monospace, monospace; font-size: 11px; color: #a1a1aa; white-space: pre; }
+
+/* Code block in rich editor */
+.rich-editor pre { background: #09090b; border: 1px solid #27272a; border-radius: 6px; padding: 0.75rem; margin: 0.5rem 0; overflow-x: auto; }
+.rich-editor pre code { font-family: 'Geist Mono', ui-monospace, monospace; font-size: 12.5px; color: #d4d4d8; white-space: pre; }

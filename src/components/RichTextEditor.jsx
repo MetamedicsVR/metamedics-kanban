@@ -1,6 +1,14 @@
-import { useEditor, EditorContent } from '@tiptap/react'
+import { useEditor, EditorContent, ReactNodeViewRenderer } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import Underline from '@tiptap/extension-underline'
+import CodeBlock from '@tiptap/extension-code-block'
+import CodeBlockNode from './CodeBlockNode'
+
+const CustomCodeBlock = CodeBlock.extend({
+  addNodeView() {
+    return ReactNodeViewRenderer(CodeBlockNode)
+  },
+})
 
 function ToolbarBtn({ onMouseDown, active, title, children }) {
   return (
@@ -22,7 +30,11 @@ function ToolbarBtn({ onMouseDown, active, title, children }) {
 
 export default function RichTextEditor({ value, onChange, placeholder }) {
   const editor = useEditor({
-    extensions: [StarterKit, Underline],
+    extensions: [
+      StarterKit.configure({ codeBlock: false }),
+      Underline,
+      CustomCodeBlock,
+    ],
     content: value || '',
     autofocus: false,
     onUpdate: ({ editor }) => {
@@ -45,7 +57,7 @@ export default function RichTextEditor({ value, onChange, placeholder }) {
 
   return (
     <div className="w-full bg-zinc-900/60 border border-zinc-800 rounded-md overflow-hidden focus-within:shadow-[0_0_0_2px_#0a0a0b,0_0_0_4px_rgba(129,140,248,.45)]">
-      <div className="flex items-center gap-0.5 px-2 py-1 border-b border-zinc-800/80 bg-zinc-900/40">
+      <div className="flex items-center gap-0.5 px-2 py-1 border-b border-zinc-800/80 bg-zinc-900/40 flex-wrap">
         <ToolbarBtn
           onMouseDown={cmd(() => editor.chain().focus().toggleBold().run())}
           active={editor.isActive('bold')}
@@ -64,7 +76,9 @@ export default function RichTextEditor({ value, onChange, placeholder }) {
           title="Subrayado (Ctrl+U)">
           <span className="text-[13px] underline">U</span>
         </ToolbarBtn>
+
         <div className="w-px h-4 bg-zinc-700/60 mx-1" />
+
         <ToolbarBtn
           onMouseDown={cmd(() => editor.chain().focus().toggleBulletList().run())}
           active={editor.isActive('bulletList')}
@@ -76,6 +90,15 @@ export default function RichTextEditor({ value, onChange, placeholder }) {
           active={editor.isActive('orderedList')}
           title="Lista numerada">
           <span className="text-[11px] font-mono">1.</span>
+        </ToolbarBtn>
+
+        <div className="w-px h-4 bg-zinc-700/60 mx-1" />
+
+        <ToolbarBtn
+          onMouseDown={cmd(() => editor.chain().focus().toggleCodeBlock().run())}
+          active={editor.isActive('codeBlock')}
+          title="Bloque de código / prompt">
+          <span className="text-[11px] font-mono tracking-tighter">&lt;/&gt;</span>
         </ToolbarBtn>
       </div>
 

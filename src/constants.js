@@ -21,6 +21,8 @@ export const TYPES = {
   feedback:    { label: 'Feedback',      icon: '💬', fg: 'text-violet-300', bg: 'bg-violet-500/10', bd: 'border-violet-500/20', strip: '#a78bfa' },
   improvement: { label: 'Mejora',        icon: '✨', fg: 'text-amber-300',  bg: 'bg-amber-500/10',  bd: 'border-amber-500/20',  strip: '#f59e0b' },
   tech_debt:   { label: 'Deuda técnica', icon: '⚙️', fg: 'text-zinc-300',  bg: 'bg-zinc-500/10',   bd: 'border-zinc-500/20',   strip: '#71717a' },
+  prompt:      { label: 'Prompt',        icon: '🤖', fg: 'text-teal-300',   bg: 'bg-teal-500/10',   bd: 'border-teal-500/20',   strip: '#14b8a6' },
+  design:      { label: 'Diseño (UX)',   icon: '🎨', fg: 'text-pink-300',   bg: 'bg-pink-500/10',   bd: 'border-pink-500/20',   strip: '#ec4899' },
 }
 
 export const PRIORITIES = {

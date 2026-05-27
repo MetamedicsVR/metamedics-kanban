@@ -51,27 +51,55 @@ textarea { resize: vertical; }
 
 .bugs-col { background: linear-gradient(180deg, rgba(244, 63, 94, 0.04) 0%, transparent 80%); }
 
-/* ─── Rich text editor content ─────────────────────────────────────────────── */
-.rich-editor p { margin: 0 0 0.25rem 0; }
-.rich-editor p:last-child { margin-bottom: 0; }
-.rich-editor strong { font-weight: 600; color: #f4f4f5; }
-.rich-editor em { font-style: italic; }
-.rich-editor u { text-decoration: underline; }
-.rich-editor ul { list-style-type: disc; padding-left: 1.25rem; margin: 0.25rem 0; }
-.rich-editor ol { list-style-type: decimal; padding-left: 1.25rem; margin: 0.25rem 0; }
-.rich-editor li { margin-bottom: 0.1rem; }
-.rich-editor li p { margin: 0; }
+/* ─── Quill dark editor ─────────────────────────────────────────────────────── */
+.rte-quill .ql-editor {
+  min-height: 100px;
+  padding: 0.625rem 0.75rem;
+  font-size: 0.875rem;
+  line-height: 1.6;
+  color: #f4f4f5;
+  font-family: inherit;
+}
+.rte-quill .ql-editor:focus { outline: none; }
+.rte-quill .ql-editor.ql-blank::before {
+  color: #52525b;
+  font-style: normal;
+  left: 0.75rem;
+  right: 0.75rem;
+  pointer-events: none;
+}
+.rte-quill .ql-editor p { margin: 0 0 0.2rem; }
+.rte-quill .ql-editor p:last-child { margin: 0; }
+.rte-quill .ql-editor strong { color: #f4f4f5; }
+.rte-quill .ql-editor ul, .rte-quill .ql-editor ol { padding-left: 1.25rem; margin: 0.25rem 0; }
+.rte-quill .ql-editor li { margin-bottom: 0.1rem; }
+.rte-quill .ql-code-block-container {
+  background: #09090b;
+  border: 1px solid #27272a;
+  border-radius: 6px;
+  padding: 0.75rem;
+  margin: 0.5rem 0;
+  overflow-x: auto;
+}
+.rte-quill .ql-code-block {
+  font-family: 'Geist Mono', ui-monospace, monospace;
+  font-size: 12.5px;
+  color: #d4d4d8;
+  white-space: pre;
+  display: block;
+  line-height: 1.5;
+}
 
-/* Rendered HTML in card previews */
+/* ─── Rendered HTML in card previews ───────────────────────────────────────── */
 .card-description strong { font-weight: 600; }
 .card-description em { font-style: italic; }
 .card-description u { text-decoration: underline; }
 .card-description ul { list-style-type: disc; padding-left: 1rem; }
 .card-description ol { list-style-type: decimal; padding-left: 1rem; }
 .card-description li { display: list-item; }
+/* pre format (legacy) */
 .card-description pre { background: #09090b; border: 1px solid #27272a; border-radius: 6px; padding: 0.4rem 0.6rem; overflow-x: auto; }
 .card-description pre code { font-family: 'Geist Mono', ui-monospace, monospace; font-size: 11px; color: #a1a1aa; white-space: pre; }
-
-/* Code block in rich editor */
-.rich-editor pre { background: #09090b; border: 1px solid #27272a; border-radius: 6px; padding: 0.75rem; margin: 0.5rem 0; overflow-x: auto; }
-.rich-editor pre code { font-family: 'Geist Mono', ui-monospace, monospace; font-size: 12.5px; color: #d4d4d8; white-space: pre; }
+/* Quill code block format */
+.card-description .ql-code-block-container { background: #09090b; border: 1px solid #27272a; border-radius: 6px; padding: 0.4rem 0.6rem; overflow-x: auto; margin: 0.25rem 0; }
+.card-description .ql-code-block { font-family: 'Geist Mono', ui-monospace, monospace; font-size: 11px; color: #a1a1aa; white-space: pre; display: block; }

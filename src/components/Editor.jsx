@@ -3,11 +3,35 @@ import { COLUMNS, TYPES, PRIORITIES, SIZES, ME_KEY } from '../constants'
 import { uid, formatRelative } from '../utils'
 import { Btn, Field, Input, TextArea, Select, AutoInput, TagInput, Icon, I, AvatarDot } from './ui'
 import RichTextEditor from './RichTextEditor'
+import { supabaseConfigured, uploadFile, removeFile } from '../lib/supabase'
+
+function fileEmoji(mime) {
+  if (!mime) return '📎'
+  if (mime.startsWith('image/')) return '🖼'
+  if (mime === 'application/pdf') return '📄'
+  if (mime.includes('word') || mime.includes('document')) return '📝'
+  if (mime.includes('excel') || mime.includes('spreadsheet') || mime === 'text/csv') return '📊'
+  if (mime.includes('powerpoint') || mime.includes('presentation')) return '📊'
+  if (mime === 'text/html') return '🌐'
+  if (mime.startsWith('video/')) return '🎬'
+  if (mime.startsWith('audio/')) return '🎵'
+  if (mime.includes('zip') || mime.includes('compressed') || mime.includes('x-tar')) return '🗜'
+  return '📎'
+}
+
+function fmtSize(bytes) {
+  if (!bytes) return ''
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
 
 export default function Editor({ card, suggestions, onClose, onSave, onArchive, onDelete }) {
   const [draft, setDraft] = useState(card)
   const [commentText, setCommentText] = useState('')
   const [commentAuthor, setCommentAuthor] = useState(localStorage.getItem(ME_KEY) || '')
+  const [uploading, setUploading] = useState(false)
+  const [uploadError, setUploadError] = useState('')
   const [newCheck, setNewCheck] = useState('')
   const titleRef = useRef(null)
   const isNew = card.__isNew
@@ -46,8 +70,34 @@ export default function Editor({ card, suggestions, onClose, onSave, onArchive, 
   const delComment = (id) => update({ comments: draft.comments.filter(c => c.id !== id) })
 
   const addLink = () => update({ links: [...(draft.links || []), { label: '', url: '' }] })
-  const updLink = (i, patch) => update({ links: draft.links.map((l, idx) => idx === i ? { ...l, ...patch } : l) })
-  const delLink = (i) => update({ links: draft.links.filter((_, idx) => idx !== i) })
+  const updLink = (link, patch) => update({ links: (draft.links || []).map(l => l === link ? { ...l, ...patch } : l) })
+  const delLink = (link) => update({ links: (draft.links || []).filter(l => l !== link) })
+
+  const handleUpload = async (e) => {
+    const files = Array.from(e.target.files || [])
+    if (!files.length) return
+    setUploading(true)
+    setUploadError('')
+    try {
+      const results = await Promise.all(files.map(f => uploadFile(draft.id, f)))
+      update({ links: [...(draft.links || []), ...results.map(r => ({ ...r, isFile: true, id: uid() }))] })
+    } catch (err) {
+      setUploadError(err.message?.includes('Bucket not found')
+        ? 'Crea el bucket "card-attachments" en Supabase Storage primero.'
+        : `Error al subir: ${err.message}`)
+    } finally {
+      setUploading(false)
+      e.target.value = ''
+    }
+  }
+
+  const handleDelFile = async (file) => {
+    update({ links: (draft.links || []).filter(l => l !== file) })
+    if (file.path) removeFile(file.path).catch(() => {})
+  }
+
+  const regularLinks = (draft.links || []).filter(l => !l.isFile)
+  const fileAttachments = (draft.links || []).filter(l => l.isFile)
 
   const checklistDone = draft.checklist?.filter(c => c.done).length || 0
   const checklistTotal = draft.checklist?.length || 0
@@ -127,23 +177,69 @@ export default function Editor({ card, suggestions, onClose, onSave, onArchive, 
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-2">
                   <Icon d={I.link} className="w-4 h-4 text-zinc-500" />
-                  <span className="text-[11px] uppercase tracking-wider text-zinc-500 font-medium">Adjuntos / Links</span>
+                  <span className="text-[11px] uppercase tracking-wider text-zinc-500 font-medium">Links</span>
                 </div>
                 <button onClick={addLink} className="text-[11px] text-indigo-400 hover:text-indigo-300 inline-flex items-center gap-1">
                   <Icon d={I.plus} className="w-3 h-3" />añadir
                 </button>
               </div>
               <div className="space-y-1.5">
-                {(draft.links || []).map((link, i) => (
-                  <div key={i} className="flex items-center gap-1.5">
-                    <Input value={link.label} onChange={e => updLink(i, { label: e.target.value })} placeholder="Figma, Loom…" className="w-32 text-xs" />
-                    <Input value={link.url} onChange={e => updLink(i, { url: e.target.value })} placeholder="https://…" className="flex-1 text-xs mono" />
-                    <button onClick={() => delLink(i)} className="text-zinc-500 hover:text-red-400 p-1">
+                {regularLinks.map((link) => (
+                  <div key={link.url + link.label} className="flex items-center gap-1.5">
+                    <Input value={link.label} onChange={e => updLink(link, { label: e.target.value })} placeholder="Figma, Loom…" className="w-32 text-xs" />
+                    <Input value={link.url} onChange={e => updLink(link, { url: e.target.value })} placeholder="https://…" className="flex-1 text-xs mono" />
+                    <button onClick={() => delLink(link)} className="text-zinc-500 hover:text-red-400 p-1">
                       <Icon d={I.x} className="w-3.5 h-3.5" />
                     </button>
                   </div>
                 ))}
-                {!(draft.links || []).length && <p className="text-[11px] text-zinc-600 italic">Sin links · solo URLs (Figma, Loom, docs)</p>}
+                {!regularLinks.length && <p className="text-[11px] text-zinc-600 italic">Sin links · Figma, Loom, docs…</p>}
+              </div>
+            </div>
+
+            {/* Archivos */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <Icon d={I.paperclip} className="w-4 h-4 text-zinc-500" />
+                  <span className="text-[11px] uppercase tracking-wider text-zinc-500 font-medium">Archivos</span>
+                  {fileAttachments.length > 0 && <span className="mono text-[11px] text-zinc-600">· {fileAttachments.length}</span>}
+                </div>
+                {supabaseConfigured && (
+                  <label className={`text-[11px] inline-flex items-center gap-1 cursor-pointer ${uploading ? 'text-zinc-500' : 'text-indigo-400 hover:text-indigo-300'}`}>
+                    <Icon d={I.upload} className="w-3 h-3" />
+                    {uploading ? 'Subiendo…' : 'Subir archivo'}
+                    <input type="file" multiple onChange={handleUpload} className="hidden" disabled={uploading} />
+                  </label>
+                )}
+              </div>
+
+              {!supabaseConfigured && (
+                <p className="text-[11px] text-zinc-600 italic">Requiere Supabase configurado y el bucket <span className="mono">card-attachments</span></p>
+              )}
+              {uploadError && (
+                <p className="text-[11px] text-red-400 mb-1.5">{uploadError}</p>
+              )}
+
+              <div className="space-y-1">
+                {fileAttachments.map((file) => (
+                  <div key={file.id || file.url} className="group flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-zinc-900/50">
+                    <span className="text-base leading-none shrink-0">{fileEmoji(file.mime)}</span>
+                    <a href={file.url} target="_blank" rel="noopener noreferrer"
+                      className="flex-1 min-w-0 text-[12px] text-zinc-300 hover:text-indigo-300 truncate"
+                      onClick={e => e.stopPropagation()}>
+                      {file.name}
+                    </a>
+                    <span className="mono text-[10px] text-zinc-600 shrink-0">{fmtSize(file.size)}</span>
+                    <button onClick={() => handleDelFile(file)}
+                      className="opacity-0 group-hover:opacity-100 text-zinc-500 hover:text-red-400 p-0.5 transition-opacity">
+                      <Icon d={I.x} className="w-3 h-3" />
+                    </button>
+                  </div>
+                ))}
+                {!fileAttachments.length && supabaseConfigured && (
+                  <p className="text-[11px] text-zinc-600 italic">Sin archivos · HTML, PDF, DOCX, imágenes…</p>
+                )}
               </div>
             </div>
 

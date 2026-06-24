@@ -53,9 +53,14 @@ export default function Card({ card, onOpen, onMove, onArchive, onDelete, dragHa
               <Icon d={I.chat} className="w-3 h-3" />{card.comments.length}
             </span>
           )}
-          {card.links?.length > 0 && (
+          {card.links?.filter(l => !l.isFile).length > 0 && (
             <span className="inline-flex items-center gap-1" title="Links">
-              <Icon d={I.link} className="w-3 h-3" />{card.links.length}
+              <Icon d={I.link} className="w-3 h-3" />{card.links.filter(l => !l.isFile).length}
+            </span>
+          )}
+          {card.links?.filter(l => l.isFile).length > 0 && (
+            <span className="inline-flex items-center gap-1" title="Archivos adjuntos">
+              <Icon d={I.paperclip} className="w-3 h-3" />{card.links.filter(l => l.isFile).length}
             </span>
           )}
           {card.dueDate && (

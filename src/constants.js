@@ -1,4 +1,6 @@
 export const COLUMNS = [
+  { id: 'backlog', title: 'Backlog', dot: '#52525b',
+    info: 'Ideas y tareas futuras que aún no están listas para definirse. Un repositorio de trabajo pendiente sin fecha ni responsable asignado.' },
   { id: 'todo_define', title: 'Por definir', dot: '#71717a',
     info: 'Existe la idea o el problema, pero aún no sabemos bien qué hay que hacer ni cómo. Necesita discusión antes de poder trabajarse.' },
   { id: 'defined', title: 'Definido', dot: '#a78bfa',
@@ -13,7 +15,7 @@ export const COLUMNS = [
     info: 'Columna fija para errores en producción o detectados en testing. No siguen el flujo normal, necesitan visibilidad propia y atención rápida.' },
 ]
 
-export const FLOW_COLUMNS = ['todo_define', 'defined', 'in_progress', 'review', 'done']
+export const FLOW_COLUMNS = ['backlog', 'todo_define', 'defined', 'in_progress', 'review', 'done']
 
 export const TYPES = {
   bug:         { label: 'Bug',           icon: '🐛', fg: 'text-rose-300',   bg: 'bg-rose-500/10',   bd: 'border-rose-500/20',   strip: '#f43f5e' },

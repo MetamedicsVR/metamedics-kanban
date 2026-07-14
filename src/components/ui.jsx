@@ -52,14 +52,17 @@ export const Btn = ({ children, onClick, variant = 'ghost', size = 'md', classNa
 }
 
 // ─── Form atoms ───────────────────────────────────────────────────────────────
-export const Field = ({ label, children, hint }) => (
-  <label className="block">
+// `as` permite renderizar como <div> en lugar de <label>. Necesario cuando el
+// campo contiene controles interactivos (botones + editable): dentro de un
+// <label>, un clic se redirige al primer control del formulario, robando el foco.
+export const Field = ({ label, children, hint, as: As = 'label' }) => (
+  <As className="block">
     <div className="flex items-center justify-between mb-1.5">
       <span className="text-[11px] uppercase tracking-wider text-zinc-500 font-medium">{label}</span>
       {hint && <span className="text-[11px] text-zinc-600">{hint}</span>}
     </div>
     {children}
-  </label>
+  </As>
 )
 
 export const Input = (p) => (

@@ -130,7 +130,7 @@ export default function Editor({ card, suggestions, onClose, onSave, onArchive, 
               placeholder="Título de la tarjeta"
               className="w-full bg-transparent border-0 outline-none text-xl font-semibold text-zinc-100 placeholder:text-zinc-700 ring-focus rounded px-1 -ml-1" />
 
-            <Field label="Descripción">
+            <Field label="Descripción" as="div">
               <RichTextEditor
                 key={draft.id}
                 value={draft.description}

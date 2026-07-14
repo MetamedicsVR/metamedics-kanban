@@ -1,6 +1,13 @@
-import { useEffect, useRef, useState, useCallback } from 'react'
+import { useEffect, useRef, useState, useCallback, memo } from 'react'
 import Quill from 'quill'
 import 'quill/dist/quill.core.css'
+
+// El div que aloja Quill se monta UNA vez y nunca se vuelve a renderizar.
+// Así los re-renders de la toolbar (estado de negrita/cursiva/etc.) no tocan
+// el DOM imperativo de Quill, que si no perdería el foco al escribir.
+const QuillMount = memo(function QuillMount({ innerRef }) {
+  return <div ref={innerRef} className="rte-quill" />
+}, () => true)
 
 function ToolbarBtn({ onMouseDown, title, active, children }) {
   return (
@@ -151,7 +158,7 @@ export default function RichTextEditor({ value, onChange, placeholder }) {
           </button>
         )}
       </div>
-      <div ref={mountRef} className="rte-quill" />
+      <QuillMount innerRef={mountRef} />
     </div>
   )
 }

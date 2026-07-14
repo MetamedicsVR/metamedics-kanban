@@ -1,7 +1,8 @@
-import { TYPES, PRIORITIES } from '../constants'
+import { PRIORITIES, BOARDS } from '../constants'
 import { Icon, I, AvatarDot, Dropdown, DropItem } from './ui'
 
-export default function FilterBar({ suggestions, filters, setFilters }) {
+export default function FilterBar({ suggestions, filters, setFilters, board = BOARDS.product }) {
+  const TYPES = board.types
   const activeCount =
     (filters.assignee ? 1 : 0) + filters.types.length +
     (filters.priority ? 1 : 0) + (filters.version ? 1 : 0) +
@@ -51,24 +52,24 @@ export default function FilterBar({ suggestions, filters, setFilters }) {
         ))}
       </Dropdown>
 
-      <Dropdown label={filters.version || 'Versión'} active={!!filters.version} icon={I.layers}>
+      <Dropdown label={filters.version || board.periodFilterLabel} active={!!filters.version} icon={I.layers}>
         <DropItem selected={!filters.version} onClick={() => setFilters({ ...filters, version: '' })}>Todas</DropItem>
         {suggestions.versions.length > 0 && <div className="h-px bg-zinc-800 my-1" />}
         {suggestions.versions.map(v => (
           <DropItem key={v} selected={filters.version === v} onClick={() => setFilters({ ...filters, version: v })}>
-            <span className="mono">{v}</span>
+            <span className={board.periodMono ? 'mono' : ''}>{v}</span>
           </DropItem>
         ))}
-        {suggestions.versions.length === 0 && <div className="px-3 py-2 text-xs text-zinc-600 italic">Sin versiones aún</div>}
+        {suggestions.versions.length === 0 && <div className="px-3 py-2 text-xs text-zinc-600 italic">Sin {board.periodFilterLabel.toLowerCase()} aún</div>}
       </Dropdown>
 
-      <Dropdown label={filters.module || 'Módulo'} active={!!filters.module} icon={I.layers}>
+      <Dropdown label={filters.module || board.areaFilterLabel} active={!!filters.module} icon={I.layers}>
         <DropItem selected={!filters.module} onClick={() => setFilters({ ...filters, module: '' })}>Todos</DropItem>
         {suggestions.modules.length > 0 && <div className="h-px bg-zinc-800 my-1" />}
         {suggestions.modules.map(m => (
           <DropItem key={m} selected={filters.module === m} onClick={() => setFilters({ ...filters, module: m })}>{m}</DropItem>
         ))}
-        {suggestions.modules.length === 0 && <div className="px-3 py-2 text-xs text-zinc-600 italic">Sin módulos aún</div>}
+        {suggestions.modules.length === 0 && <div className="px-3 py-2 text-xs text-zinc-600 italic">Sin {board.areaFilterLabel.toLowerCase()} aún</div>}
       </Dropdown>
 
       {activeCount > 0 && (

@@ -19,6 +19,7 @@ export function formatRelative(ts) {
 export function fromDb(row) {
   return {
     id: row.id,
+    board: row.board || 'product',
     column: row.column_id,
     title: row.title || '',
     description: row.description || '',
@@ -41,6 +42,7 @@ export function fromDb(row) {
 export function toDb(card) {
   return {
     id: card.id,
+    board: card.board || 'product',
     column_id: card.column,
     title: card.title,
     description: card.description || '',

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { COLUMNS, TYPES, PRIORITIES, SIZES, ME_KEY } from '../constants'
+import { PRIORITIES, SIZES, ME_KEY, getBoard } from '../constants'
 import { uid, formatRelative } from '../utils'
 import { Btn, Field, Input, TextArea, Select, AutoInput, TagInput, Icon, I, AvatarDot } from './ui'
 import RichTextEditor from './RichTextEditor'
@@ -35,6 +35,9 @@ export default function Editor({ card, suggestions, onClose, onSave, onArchive, 
   const [newCheck, setNewCheck] = useState('')
   const titleRef = useRef(null)
   const isNew = card.__isNew
+  const board = getBoard(draft.board)
+  const COLUMNS = board.columns
+  const TYPES = board.types
 
   useEffect(() => {
     if (isNew) titleRef.current?.focus()
@@ -318,13 +321,13 @@ export default function Editor({ card, suggestions, onClose, onSave, onArchive, 
                 ))}
               </div>
             </Field>
-            <Field label="Versión" hint="V3, v4.1…">
+            <Field label={board.periodLabel}>
               <AutoInput value={draft.version} onChange={v => update({ version: v })}
-                suggestions={suggestions.versions} placeholder="V4, v4.1…" mono />
+                suggestions={suggestions.versions} placeholder={board.periodPlaceholder} mono={board.periodMono} />
             </Field>
-            <Field label="Módulo / área">
+            <Field label={board.areaLabel}>
               <AutoInput value={draft.module} onChange={v => update({ module: v })}
-                suggestions={suggestions.modules} placeholder="Simulaciones, LMS…" />
+                suggestions={suggestions.modules} placeholder={board.areaPlaceholder} />
             </Field>
             <Field label="Fecha límite" hint="opcional">
               <Input type="date" value={draft.dueDate || ''} onChange={e => update({ dueDate: e.target.value })} className="mono" />

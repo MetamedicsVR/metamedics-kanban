@@ -1,5 +1,5 @@
 import { useState, useMemo, lazy, Suspense } from 'react'
-import { COLUMNS, FLOW_COLUMNS, ME_KEY } from './constants'
+import { ME_KEY, BOARD_KEY, BOARD_LIST, getBoard } from './constants'
 import { uid } from './utils'
 import { useKanban } from './hooks/useKanban'
 import { supabaseConfigured } from './lib/supabase'
@@ -22,6 +22,7 @@ function Stat({ label, value, accent }) {
 
 export default function App() {
   const kanban = useKanban()
+  const [activeBoard, setActiveBoard] = useState(localStorage.getItem(BOARD_KEY) || 'product')
   const [editing, setEditing] = useState(null)
   const [showActivity, setShowActivity] = useState(false)
   const [showArchive, setShowArchive] = useState(false)
@@ -29,12 +30,27 @@ export default function App() {
   const [filters, setFilters] = useState({ search: '', assignee: '', types: [], priority: '', version: '', module: '' })
   const [drag, setDrag] = useState({ id: null, overCol: null })
 
+  const board = getBoard(activeBoard)
   const onMeChange = (v) => { setMe(v); localStorage.setItem(ME_KEY, v) }
 
-  // Autocomplete suggestions derived from all cards
+  const switchBoard = (id) => {
+    setActiveBoard(id)
+    localStorage.setItem(BOARD_KEY, id)
+    setFilters({ search: '', assignee: '', types: [], priority: '', version: '', module: '' })
+    setEditing(null)
+    setDrag({ id: null, overCol: null })
+  }
+
+  // Solo las tarjetas del tablero activo
+  const boardCards = useMemo(
+    () => kanban.cards.filter(c => (c.board || 'product') === activeBoard),
+    [kanban.cards, activeBoard]
+  )
+
+  // Autocomplete suggestions derived from the active board's cards
   const suggestions = useMemo(() => {
     const asSet = new Set(), vSet = new Set(), mSet = new Set()
-    for (const c of kanban.cards) {
+    for (const c of boardCards) {
       (c.assignees || []).forEach(a => a && asSet.add(a))
       if (c.version) vSet.add(c.version)
       if (c.module) mSet.add(c.module)
@@ -52,9 +68,9 @@ export default function App() {
       versions: sortVersions([...vSet]),
       modules: [...mSet].sort((a, b) => a.localeCompare(b, 'es')),
     }
-  }, [kanban.cards])
+  }, [boardCards])
 
-  const visibleCards = useMemo(() => kanban.cards.filter(c => !c.archived), [kanban.cards])
+  const visibleCards = useMemo(() => boardCards.filter(c => !c.archived), [boardCards])
 
   const filtered = useMemo(() => visibleCards.filter(c => {
     if (filters.search) {
@@ -71,23 +87,25 @@ export default function App() {
   }), [visibleCards, filters])
 
   const cardsByCol = useMemo(() => {
-    const m = Object.fromEntries(COLUMNS.map(c => [c.id, []]))
-    for (const c of filtered) (m[c.column] || m.defined).push(c)
+    const m = Object.fromEntries(board.columns.map(c => [c.id, []]))
+    const fallback = board.defaultColumn
+    for (const c of filtered) (m[c.column] || m[fallback]).push(c)
     return m
-  }, [filtered])
+  }, [filtered, board])
 
   const totals = useMemo(() => ({
     total: visibleCards.length,
-    active: visibleCards.filter(c => c.column !== 'done').length,
-    bugs: visibleCards.filter(c => c.column === 'bugs').length,
-    overdue: visibleCards.filter(c => c.dueDate && c.column !== 'done' && new Date(c.dueDate).getTime() < Date.now() - 86400000).length,
-    archived: kanban.cards.filter(c => c.archived).length,
-  }), [kanban.cards, visibleCards])
+    active: visibleCards.filter(c => c.column !== board.doneColumn).length,
+    fixed: visibleCards.filter(c => c.column === board.fixedColumn).length,
+    overdue: visibleCards.filter(c => c.dueDate && c.column !== board.doneColumn && new Date(c.dueDate).getTime() < Date.now() - 86400000).length,
+    archived: boardCards.filter(c => c.archived).length,
+  }), [boardCards, visibleCards, board])
 
   const addCard = (columnId) => {
+    const defaultType = columnId === 'bugs' ? 'bug' : board.defaultType
     setEditing({
-      id: uid(), column: columnId, title: '', description: '',
-      type: columnId === 'bugs' ? 'bug' : 'task',
+      id: uid(), board: activeBoard, column: columnId, title: '', description: '',
+      type: defaultType,
       priority: 'medium', assignees: [], size: '', version: '', module: '',
       dueDate: '', links: [], checklist: [], comments: [],
       createdAt: Date.now(), archived: false, archivedAt: null,
@@ -120,7 +138,7 @@ export default function App() {
     setEditing(null)
   }
 
-  const moveCard = (id, delta) => kanban.moveCard(id, delta, FLOW_COLUMNS)
+  const moveCard = (id, delta) => kanban.moveCard(id, delta, board.flow)
 
   const onDragStart = (id) => setDrag({ id, overCol: null })
   const onDragOver = (colId) => setDrag(d => d.overCol === colId ? d : { ...d, overCol: colId })
@@ -157,7 +175,21 @@ export default function App() {
         </div>
       )}
 
-      <header className="border-b border-zinc-900 bg-zinc-950/80 backdrop-blur sticky top-0 z-20">
+      {/* Tabs de tablero */}
+      <div className="border-b border-zinc-900 bg-zinc-950 px-5 flex items-center gap-1 sticky top-0 z-30">
+        {BOARD_LIST.map(b => (
+          <button key={b.id} onClick={() => switchBoard(b.id)}
+            className={`px-4 py-2.5 text-[13px] font-medium border-b-2 -mb-px transition-colors ${
+              activeBoard === b.id
+                ? 'border-indigo-500 text-zinc-100'
+                : 'border-transparent text-zinc-500 hover:text-zinc-300 hover:border-zinc-700'
+            }`}>
+            {b.label}
+          </button>
+        ))}
+      </div>
+
+      <header className="border-b border-zinc-900 bg-zinc-950/80 backdrop-blur sticky top-[45px] z-20">
         <div className="px-5 py-3 flex items-center justify-between gap-4 flex-wrap">
           <div className="flex items-center gap-3">
             <div className="w-7 h-7 rounded-md bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center shadow-sm shadow-indigo-500/30">
@@ -167,13 +199,13 @@ export default function App() {
             </div>
             <div>
               <h1 className="text-sm font-semibold text-zinc-100 tracking-tight leading-none">Task Manager</h1>
-              <p className="text-[11px] text-zinc-500 mt-0.5 leading-none">Producto &amp; Desarrollo · MetaMedics</p>
+              <p className="text-[11px] text-zinc-500 mt-0.5 leading-none">{board.subtitle}</p>
             </div>
           </div>
           <div className="flex items-center gap-4 text-[11px] text-zinc-500 flex-wrap">
             <Stat label="Total" value={totals.total} />
             <Stat label="Activas" value={totals.active} />
-            <Stat label="Bugs" value={totals.bugs} accent={totals.bugs > 0 ? 'text-rose-300' : ''} />
+            <Stat label={board.fixedLabel} value={totals.fixed} accent={totals.fixed > 0 ? board.fixedAccent : ''} />
             <Stat label="Vencidas" value={totals.overdue} accent={totals.overdue > 0 ? 'text-red-300' : ''} />
             <Stat label="Archivadas" value={totals.archived} />
             <div className="flex items-center gap-1.5">
@@ -185,7 +217,7 @@ export default function App() {
           </div>
         </div>
         <div className="px-5 pb-3 flex items-center justify-between gap-3 flex-wrap">
-          <FilterBar suggestions={suggestions} filters={filters} setFilters={setFilters} />
+          <FilterBar suggestions={suggestions} filters={filters} setFilters={setFilters} board={board} />
           <div className="flex items-center gap-2">
             <Btn variant="outline" size="md" onClick={() => setShowActivity(true)} title="Log de actividad">
               <Icon d={I.history} className="w-4 h-4" /><span className="hidden sm:inline">Actividad</span>
@@ -194,7 +226,7 @@ export default function App() {
               <Icon d={I.archive} className="w-4 h-4" /><span className="hidden sm:inline">Archivo</span>
               {totals.archived > 0 && <span className="mono text-[10px] bg-zinc-800 rounded px-1 ml-0.5">{totals.archived}</span>}
             </Btn>
-            <Btn variant="primary" size="md" onClick={() => addCard('defined')}>
+            <Btn variant="primary" size="md" onClick={() => addCard(board.defaultColumn)}>
               <Icon d={I.plus} className="w-4 h-4" /> Nueva tarjeta
             </Btn>
           </div>
@@ -203,8 +235,8 @@ export default function App() {
 
       <main className="flex-1 overflow-x-auto p-5">
         <div className="flex gap-4 h-full min-h-[600px]">
-          {COLUMNS.map((col, idx) => (
-            <Column key={col.id} col={col} columnIndex={idx}
+          {board.columns.map((col, idx) => (
+            <Column key={col.id} col={col} columnIndex={idx} flowColumns={board.flow}
               cards={cardsByCol[col.id] || []}
               onAdd={addCard} onOpen={setEditing} onMove={moveCard}
               onDelete={deleteCard} onArchive={archiveCard}
@@ -235,7 +267,7 @@ export default function App() {
       )}
       {showActivity && <ActivityPanel activity={kanban.activity} onClose={() => setShowActivity(false)} />}
       {showArchive && (
-        <ArchivePanel cards={kanban.cards}
+        <ArchivePanel cards={boardCards}
           onRestore={kanban.restoreCard}
           onDelete={deleteCard}
           onOpen={c => { setShowArchive(false); setEditing(c) }}

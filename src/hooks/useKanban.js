@@ -1,9 +1,9 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { fromDb, toDb, activityFromDb } from '../utils'
-import { COLUMNS, ME_KEY } from '../constants'
+import { ALL_COLUMNS, ME_KEY } from '../constants'
 
-const colTitle = (id) => COLUMNS.find(c => c.id === id)?.title || id
+const colTitle = (id) => ALL_COLUMNS.find(c => c.id === id)?.title || id
 const getMe = () => localStorage.getItem(ME_KEY) || ''
 
 async function logActivity(entry) {
@@ -134,9 +134,9 @@ export function useKanban() {
 
   const moveCard = useCallback(async (id, delta, flowColumns) => {
     const card = cardsRef.current.find(c => c.id === id)
-    if (!card || card.column === 'bugs') return
+    if (!card) return
     const idx = flowColumns.indexOf(card.column)
-    if (idx < 0) return
+    if (idx < 0) return  // columnas fijas (bugs / recurrente) no se mueven por flujo
     const next = Math.max(0, Math.min(flowColumns.length - 1, idx + delta))
     const newCol = flowColumns[next]
     if (newCol === card.column) return

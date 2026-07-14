@@ -4,6 +4,7 @@
 -- ─── Cards ────────────────────────────────────────────────────────────────────
 create table if not exists cards (
   id          uuid        primary key default gen_random_uuid(),
+  board       text        not null default 'product',
   column_id   text        not null default 'todo_define',
   title       text        not null default '',
   description text        not null default '',

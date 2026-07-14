@@ -2,9 +2,10 @@ import { FLOW_COLUMNS } from '../constants'
 import { Icon, I, InfoButton } from './ui'
 import Card from './Card'
 
-export default function Column({ col, cards, onAdd, onOpen, onMove, onDelete, onArchive, dragState, onDragOver, onDrop, onDragStart, onDragEnd, columnIndex }) {
+export default function Column({ col, cards, onAdd, onOpen, onMove, onDelete, onArchive, dragState, onDragOver, onDrop, onDragStart, onDragEnd, columnIndex, flowColumns = FLOW_COLUMNS }) {
   const isOver = dragState.overCol === col.id
   const isBugs = col.id === 'bugs'
+  const isFixed = !!col.fixed
 
   return (
     <div className={`flex flex-col min-w-[300px] w-[300px] bg-zinc-950/40 border ${isBugs ? 'border-rose-500/15 bugs-col' : 'border-zinc-900'} rounded-xl ${isOver ? 'col-drag-over' : ''}`}
@@ -32,9 +33,9 @@ export default function Column({ col, cards, onAdd, onOpen, onMove, onDelete, on
           </div>
         )}
         {cards.map(card => {
-          const flowIdx = FLOW_COLUMNS.indexOf(card.column)
-          const allowL = isBugs ? false : flowIdx > 0
-          const allowR = isBugs ? false : flowIdx >= 0 && flowIdx < FLOW_COLUMNS.length - 1
+          const flowIdx = flowColumns.indexOf(card.column)
+          const allowL = isFixed ? false : flowIdx > 0
+          const allowR = isFixed ? false : flowIdx >= 0 && flowIdx < flowColumns.length - 1
           return (
             <Card key={card.id} card={card} columnIndex={columnIndex}
               onOpen={onOpen} onMove={onMove} onDelete={onDelete} onArchive={onArchive}

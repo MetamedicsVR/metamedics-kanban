@@ -55,6 +55,7 @@ const MARKETING_TYPES = {
   mk_design:   { label: 'Diseño',           icon: '🎨', fg: 'text-pink-300',    bg: 'bg-pink-500/10',    bd: 'border-pink-500/20',    strip: '#ec4899' },
   mk_setup:    { label: 'Setup / Técnico',  icon: '⚙️', fg: 'text-amber-300',   bg: 'bg-amber-500/10',   bd: 'border-amber-500/20',   strip: '#f59e0b' },
   mk_coord:    { label: 'Coordinación',     icon: '🤝', fg: 'text-teal-300',    bg: 'bg-teal-500/10',    bd: 'border-teal-500/20',    strip: '#14b8a6' },
+  mk_project:  { label: 'Proyecto',         icon: '🚀', fg: 'text-indigo-300',  bg: 'bg-indigo-500/10',  bd: 'border-indigo-500/20',  strip: '#818cf8' },
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

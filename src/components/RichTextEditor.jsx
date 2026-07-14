@@ -24,21 +24,30 @@ export default function RichTextEditor({ value, onChange, placeholder }) {
   useEffect(() => { onChangeRef.current = onChange }, [onChange])
 
   useEffect(() => {
-    if (!mountRef.current || quillRef.current) return
+    const container = mountRef.current
+    if (!container) return
 
-    const q = new Quill(mountRef.current, {
-      formats: ['bold', 'italic', 'underline', 'list', 'code-block', 'indent'],
+    // Arranque limpio: crea un div fresco para Quill dentro del contenedor.
+    // Si por cualquier motivo hubiera un montaje previo (StrictMode, remount),
+    // lo eliminamos primero para no acabar con dos editores superpuestos.
+    container.innerHTML = ''
+    const editorEl = document.createElement('div')
+    container.appendChild(editorEl)
+
+    const q = new Quill(editorEl, {
+      formats: ['bold', 'italic', 'underline', 'list', 'code-block'],
       placeholder,
       modules: { toolbar: false },
     })
 
-    if (value) q.clipboard.dangerouslyPasteHTML(value)
+    // Contenido inicial (sin robar el foco ni hacer scroll).
+    if (value) q.clipboard.dangerouslyPasteHTML(value, 'silent')
 
     q.on('text-change', () => {
-      const editor = mountRef.current?.querySelector('.ql-editor')
-      if (!editor) return
+      const editorNode = editorEl.querySelector('.ql-editor')
+      if (!editorNode) return
       const empty = q.getText().trim() === ''
-      onChangeRef.current(empty ? '' : editor.innerHTML)
+      onChangeRef.current(empty ? '' : editorNode.innerHTML)
     })
 
     q.on('selection-change', (range) => {
@@ -48,13 +57,26 @@ export default function RichTextEditor({ value, onChange, placeholder }) {
     })
 
     quillRef.current = q
-    return () => { quillRef.current = null }
+
+    return () => {
+      quillRef.current = null
+      // Desmontaje total: elimina el editor y todos sus listeners del DOM.
+      container.innerHTML = ''
+    }
   }, []) // eslint-disable-line
+
+  const focusEditor = (q) => {
+    if (!q.hasFocus()) {
+      const len = q.getLength()
+      q.setSelection(Math.max(0, len - 1), 0)
+    }
+  }
 
   const applyFmt = useCallback((name) => (e) => {
     e.preventDefault()
     const q = quillRef.current
     if (!q) return
+    focusEditor(q)
     const range = q.getSelection()
     if (!range) return
     q.format(name, !q.getFormat(range)[name])
@@ -64,6 +86,7 @@ export default function RichTextEditor({ value, onChange, placeholder }) {
     e.preventDefault()
     const q = quillRef.current
     if (!q) return
+    focusEditor(q)
     const range = q.getSelection()
     if (!range) return
     const f = q.getFormat(range)
@@ -74,6 +97,7 @@ export default function RichTextEditor({ value, onChange, placeholder }) {
     e.preventDefault()
     const q = quillRef.current
     if (!q) return
+    focusEditor(q)
     const range = q.getSelection()
     if (!range) return
     q.format('code-block', !q.getFormat(range)['code-block'])

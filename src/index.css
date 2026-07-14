@@ -52,13 +52,16 @@ textarea { resize: vertical; }
 .bugs-col { background: linear-gradient(180deg, rgba(244, 63, 94, 0.04) 0%, transparent 80%); }
 
 /* ─── Quill dark editor ─────────────────────────────────────────────────────── */
+.rte-quill { cursor: text; }
+.rte-quill .ql-container { font-family: inherit; }
 .rte-quill .ql-editor {
-  min-height: 100px;
+  min-height: 140px;
   padding: 0.625rem 0.75rem;
   font-size: 0.875rem;
   line-height: 1.6;
   color: #f4f4f5;
   font-family: inherit;
+  cursor: text;
 }
 .rte-quill .ql-editor:focus { outline: none; }
 .rte-quill .ql-editor.ql-blank::before {

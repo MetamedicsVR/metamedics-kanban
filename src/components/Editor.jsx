@@ -323,7 +323,8 @@ export default function Editor({ card, suggestions, onClose, onSave, onArchive, 
             </Field>
             <Field label={board.periodLabel}>
               <AutoInput value={draft.version} onChange={v => update({ version: v })}
-                suggestions={suggestions.versions} placeholder={board.periodPlaceholder} mono={board.periodMono} />
+                suggestions={[...new Set([...(board.periodSuggestions || []), ...suggestions.versions])]}
+                placeholder={board.periodPlaceholder} mono={board.periodMono} />
             </Field>
             <Field label={board.areaLabel}>
               <AutoInput value={draft.module} onChange={v => update({ module: v })}

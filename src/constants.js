@@ -59,6 +59,34 @@ const MARKETING_TYPES = {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+//  Tablero: PROYECTOS
+// ═══════════════════════════════════════════════════════════════════════════
+const PROJECT_COLUMNS = [
+  { id: 'pj_backlog', title: 'Backlog', dot: '#52525b',
+    info: 'Tareas identificadas en algún proyecto pero aún sin planificar. Sin responsable ni fecha todavía.' },
+  { id: 'pj_todo', title: 'Por hacer', dot: '#a78bfa',
+    info: 'Listas para coger, con responsable asignado. A la espera de capacidad para empezar.' },
+  { id: 'pj_in_progress', title: 'En progreso', dot: '#60a5fa',
+    info: 'Alguien está trabajando activamente en la tarea ahora mismo.' },
+  { id: 'pj_review', title: 'En revisión', dot: '#f59e0b',
+    info: 'El trabajo está hecho pero necesita validación o aprobación (interna o del cliente) antes de cerrar.' },
+  { id: 'pj_done', title: 'Completado', dot: '#34d399',
+    info: 'Tarea cerrada y entregada. No requiere más acción. Se archiva para mantener el histórico.' },
+  { id: 'pj_blocked', title: 'Bloqueado', dot: '#fb923c', fixed: true,
+    info: 'Tareas paradas por una dependencia externa: decisión, acceso o respuesta de cliente o de un tercero. Necesitan visibilidad propia para desatascarse.' },
+]
+
+const PROJECT_TYPES = {
+  pj_task:        { label: 'Tarea',         icon: '📋', fg: 'text-sky-300',    bg: 'bg-sky-500/10',    bd: 'border-sky-500/20',    strip: '#38bdf8' },
+  pj_milestone:   { label: 'Hito',          icon: '🎯', fg: 'text-violet-300', bg: 'bg-violet-500/10', bd: 'border-violet-500/20', strip: '#a78bfa' },
+  pj_deliverable: { label: 'Entregable',    icon: '📦', fg: 'text-indigo-300', bg: 'bg-indigo-500/10', bd: 'border-indigo-500/20', strip: '#818cf8' },
+  pj_risk:        { label: 'Riesgo',        icon: '⚠️', fg: 'text-amber-300',  bg: 'bg-amber-500/10',  bd: 'border-amber-500/20',  strip: '#f59e0b' },
+  pj_docs:        { label: 'Documentación', icon: '📄', fg: 'text-zinc-300',   bg: 'bg-zinc-500/10',   bd: 'border-zinc-500/20',   strip: '#71717a' },
+  pj_meeting:     { label: 'Reunión',       icon: '🤝', fg: 'text-teal-300',   bg: 'bg-teal-500/10',   bd: 'border-teal-500/20',   strip: '#14b8a6' },
+  pj_issue:       { label: 'Incidencia',    icon: '🐛', fg: 'text-rose-300',   bg: 'bg-rose-500/10',   bd: 'border-rose-500/20',   strip: '#f43f5e' },
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 //  Configuración por tablero
 // ═══════════════════════════════════════════════════════════════════════════
 export const BOARDS = {
@@ -104,15 +132,37 @@ export const BOARDS = {
     periodPlaceholder: 'Q1 2026, Q2 2026…',
     periodMono: false,
   },
+  projects: {
+    id: 'projects',
+    label: 'Proyectos',
+    subtitle: 'Proyectos · MetaMedics',
+    columns: PROJECT_COLUMNS,
+    flow: ['pj_backlog', 'pj_todo', 'pj_in_progress', 'pj_review', 'pj_done'],
+    types: PROJECT_TYPES,
+    defaultColumn: 'pj_todo',
+    defaultType: 'pj_task',
+    doneColumn: 'pj_done',
+    fixedColumn: 'pj_blocked',
+    fixedLabel: 'Bloqueadas',
+    fixedAccent: 'text-orange-300',
+    areaLabel: 'Proyecto',
+    areaFilterLabel: 'Proyecto',
+    areaPlaceholder: 'UDIMA, Hospital X, Grant Horizon…',
+    periodLabel: 'Fase',
+    periodFilterLabel: 'Fase',
+    periodPlaceholder: 'Kickoff, Implementación…',
+    periodMono: false,
+    periodSuggestions: ['Kickoff', 'Discovery', 'Implementación', 'Piloto', 'Cierre'],
+  },
 }
 
-export const BOARD_LIST = [BOARDS.product, BOARDS.marketing]
+export const BOARD_LIST = [BOARDS.product, BOARDS.marketing, BOARDS.projects]
 export const getBoard = (id) => BOARDS[id] || BOARDS.product
 
 // Búsquedas combinadas (todos los tableros): los chips y el log de actividad
 // deben poder resolver cualquier id de tipo o columna sin conocer el tablero.
-export const TYPES = { ...PRODUCT_TYPES, ...MARKETING_TYPES }
-export const ALL_COLUMNS = [...PRODUCT_COLUMNS, ...MARKETING_COLUMNS]
+export const TYPES = { ...PRODUCT_TYPES, ...MARKETING_TYPES, ...PROJECT_TYPES }
+export const ALL_COLUMNS = [...PRODUCT_COLUMNS, ...MARKETING_COLUMNS, ...PROJECT_COLUMNS]
 
 // Compatibilidad con imports existentes
 export const COLUMNS = PRODUCT_COLUMNS

@@ -12,10 +12,10 @@ const PRODUCT_COLUMNS = [
     info: 'Alguien está trabajando activamente en ello ahora mismo. No debería haber más de 2-3 tarjetas por persona aquí a la vez.' },
   { id: 'review', title: 'En revisión', dot: '#f59e0b',
     info: 'El trabajo está hecho pero necesita validación: una segunda opinión, QA, aprobación de producto, o prueba real antes de cerrar.' },
-  { id: 'done', title: 'Completado', dot: '#34d399',
-    info: 'Revisado, aprobado y entregado. No requiere más acción. Se archiva automáticamente para mantener el histórico.' },
   { id: 'bugs', title: 'Bugs', dot: '#f43f5e', fixed: true,
     info: 'Columna fija para errores en producción o detectados en testing. No siguen el flujo normal, necesitan visibilidad propia y atención rápida.' },
+  { id: 'done', title: 'Completado', dot: '#34d399',
+    info: 'Revisado, aprobado y entregado. No requiere más acción. Se archiva automáticamente para mantener el histórico.' },
 ]
 
 const PRODUCT_TYPES = {
